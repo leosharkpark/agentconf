@@ -5,31 +5,55 @@ import {
   drawAgentFigure,
   agentBodyHeight,
 } from "./agentCustomization.js";
+import { THEME_DARK, themeForLights, loadLightsPref } from "./theme.js";
 
-const TW=44, TH=22, BH=7, SBH=24;
+/** Set at the start of each canvas frame. */
+let activeTheme = THEME_DARK;
+
+const roomDrawColors = (room) => {
+  if (!room) return null;
+  return activeTheme.rooms[room.id] ?? {
+    top: room.top,
+    sL: room.sL,
+    sR: room.sR,
+    lc: room.lc,
+  };
+};
+
+const TW=44, TH=22, BH=7, SBH=34;
 const NET_COLS=3, NET_ROWS=3, NET_CELL_W=14, NET_CELL_H=11;
 const NET_X0=2, NET_Y0=15;
-const STAGE_X1=NET_X0, STAGE_X2=NET_X0+NET_COLS*NET_CELL_W-1;
+const VENUE_X2=NET_X0+NET_COLS*NET_CELL_W-1;
+const PODCAST_PW=9, PODCAST_PH=7, PODCAST_PBH=16;
+const PODCAST_NW={
+  id:'podcast-nw', name:'Podcast NW', icon:'🎙️', focusId:'podcast-nw',
+  x1:1, x2:1+PODCAST_PW, y1:1, y2:1+PODCAST_PH,
+  platformX1:3, platformX2:1+PODCAST_PW-3, platformY1:2, platformY2:1+PODCAST_PH-2,
+  cx:5.5, cy:4.1, logo:['AGENT','MIC'], accent:'#FF7A58',
+  top:'#2E2018', sL:'#1A100C', sR:'#241810', lc:'#FF7A58',
+};
+const PODCAST_NE={
+  id:'podcast-ne', name:'Podcast NE', icon:'🎙️', focusId:'podcast-ne',
+  x1:VENUE_X2-PODCAST_PW, x2:VENUE_X2+1, y1:1, y2:1+PODCAST_PH,
+  platformX1:VENUE_X2-PODCAST_PW+2, platformX2:VENUE_X2-2, platformY1:2, platformY2:1+PODCAST_PH-2,
+  cx:VENUE_X2-PODCAST_PW/2+0.5, cy:4.1, logo:['ROAM','CAST'], accent:'#38E8C0',
+  top:'#1E2830', sL:'#101820', sR:'#182430', lc:'#38E8C0',
+};
+const PODCAST_STUDIOS=[PODCAST_NW, PODCAST_NE];
+const STAGE_X1=PODCAST_NW.x2, STAGE_X2=PODCAST_NE.x1;
 const STAGE_Y1=2, STAGE_Y2=5;
 const STAGE_PLATFORM_X1=STAGE_X1+4, STAGE_PLATFORM_X2=STAGE_X2-4;
 const STAGE_CX=(STAGE_X1+STAGE_X2)/2;
 const STAGE_ROW=STAGE_Y1+0.5;
-const PODCAST_X1=STAGE_X2-10, PODCAST_X2=STAGE_X2+1;
-const PODCAST_Y1=6, PODCAST_Y2=13;
-const PODCAST_CX=(PODCAST_X1+PODCAST_X2)/2-0.5;
-const PODCAST_CY=PODCAST_Y1+3.6;
-const PODCAST_PLATFORM_X1=PODCAST_X1+2, PODCAST_PLATFORM_X2=PODCAST_X2-3;
-const PODCAST_PLATFORM_Y1=PODCAST_Y1+1, PODCAST_PLATFORM_Y2=PODCAST_Y2-2;
-const PODCAST_PBH=16;
 const SPONSOR_Y0=NET_Y0+NET_ROWS*NET_CELL_H+1;
 const SPONSOR_X2=NET_X0+Math.floor(NET_COLS*NET_CELL_W*0.55);
-const GW=STAGE_X2+3, GH=SPONSOR_Y0+9;
+const GW=VENUE_X2+3, GH=SPONSOR_Y0+9;
 const MAIN_DOOR_GX=STAGE_CX;
 const MAIN_DOOR_GY=GH-1.85;
 const WORLD_W=Math.round((GW+GH)*TW/2+120);
 const WORLD_H=Math.round((GW+GH)*TH/2+140);
 const OX=Math.round(WORLD_W*0.52), OY=64;
-const LAYOUT_VERSION=5;
+const LAYOUT_VERSION=6;
 const MIN_ZOOM=0.55, MAX_ZOOM=4.5, ZOOM_STEP=1.18;
 
 const iso = (gx,gy) => ({ x: OX+(gx-gy)*TW/2, y: OY+(gx+gy)*TH/2 });
@@ -101,7 +125,9 @@ const FOCUS = {
   stage: () => ({ gx: STAGE_CX, gy: STAGE_Y2 + 0.6, zoom: 1.45 }),
   stageScreen: () => ({ gx: STAGE_CX, gy: STAGE_Y1 + 0.5, zoom: 1.65 }),
   floor: () => ({ gx: STAGE_CX, gy: NET_Y0 + (NET_ROWS * NET_CELL_H) / 2, zoom: 1.35 }),
-  podcast: () => ({ gx: PODCAST_CX, gy: PODCAST_CY, zoom: 2.35 }),
+  podcast: () => ({ gx: PODCAST_NW.cx, gy: PODCAST_NW.cy, zoom: 2.35 }),
+  podcastNw: () => ({ gx: PODCAST_NW.cx, gy: PODCAST_NW.cy, zoom: 2.35 }),
+  podcastNe: () => ({ gx: PODCAST_NE.cx, gy: PODCAST_NE.cy, zoom: 2.35 }),
   booth: b => ({ gx: b.gx + 0.5, gy: b.gy + 0.5, zoom: 2.65 }),
   door: () => ({ gx: MAIN_DOOR_GX, gy: MAIN_DOOR_GY, zoom: 1.85 }),
 };
@@ -132,28 +158,14 @@ const FLOOR_ROOM = {
   id: 'floor',
   name: 'Exhibition Floor',
   icon: '🏛️',
-  x1: STAGE_X1,
-  y1: NET_Y0,
-  x2: STAGE_X2 + 1,
+  x1: 0,
+  y1: STAGE_Y2 + 1,
+  x2: GW,
   y2: GH,
   top: '#102838',
   sL: '#091820',
   sR: '#0E2035',
   lc: '#60C0FF',
-};
-
-const PODCAST_ROOM = {
-  id: 'podcast',
-  name: 'Podcast Studio',
-  icon: '🎙️',
-  x1: PODCAST_X1,
-  y1: PODCAST_Y1,
-  x2: PODCAST_X2,
-  y2: PODCAST_Y2,
-  top: '#2E2018',
-  sL: '#1A100C',
-  sR: '#241810',
-  lc: '#FF7A58',
 };
 
 const ROOMS = [
@@ -164,7 +176,7 @@ const ROOMS = [
     x1: STAGE_X1,
     y1: 1,
     x2: STAGE_X2 + 1,
-    y2: NET_Y0,
+    y2: STAGE_Y2 + 1,
     top: '#2D2250',
     sL: '#1A1438',
     sR: '#241B44',
@@ -173,7 +185,7 @@ const ROOMS = [
   FLOOR_ROOM,
 ];
 
-const ROOM_LABELS = [PODCAST_ROOM, ...ROOMS];
+const ROOM_LABELS = [...PODCAST_STUDIOS, ...ROOMS];
 
 const boothRoomId = (gx, gy) => roomAt(gx, gy)?.id || 'floor';
 const isFloorTile = (gx, gy) => (
@@ -282,6 +294,23 @@ const loadAgentNamesPref = () => {
   }
 };
 
+const loadCardinalsPref = () => {
+  try {
+    return localStorage.getItem('agentconf-cardinals') !== '0';
+  } catch {
+    return true;
+  }
+};
+
+const MAP_MID_GY = (STAGE_Y2 + NET_Y0) / 2;
+
+const CARDINAL_MARKERS = [
+  { letter: 'N', name: 'NORTH', hint: 'stage · low gy', gx: STAGE_CX, gy: 0.6, color: '#A890FF' },
+  { letter: 'S', name: 'SOUTH', hint: 'entrance · high gy', gx: MAIN_DOOR_GX, gy: GH - 0.25, color: '#90A8FF' },
+  { letter: 'E', name: 'EAST', hint: 'high gx', gx: GW - 0.45, gy: MAP_MID_GY, color: '#60C0FF' },
+  { letter: 'W', name: 'WEST', hint: 'low gx', gx: 0.45, gy: MAP_MID_GY, color: '#60C0FF' },
+];
+
 const loadBoothLayout = () => {
   try {
     if (Number(localStorage.getItem('agentconf-booth-layout-version')) !== LAYOUT_VERSION) return null;
@@ -291,17 +320,22 @@ const loadBoothLayout = () => {
   } catch { return null; }
 };
 
-const isPodcastBounds = (gx, gy) => (
-  gx >= PODCAST_X1 && gx < PODCAST_X2 && gy >= PODCAST_Y1 && gy < PODCAST_Y2
-);
-const isPodcastPlatform = (gx, gy) => (
-  gx >= PODCAST_PLATFORM_X1 && gx <= PODCAST_PLATFORM_X2
-  && gy >= PODCAST_PLATFORM_Y1 && gy <= PODCAST_PLATFORM_Y2
-);
+const podcastStudioAt = (gx, gy) => PODCAST_STUDIOS.find(s => (
+  gx >= s.x1 && gx < s.x2 && gy >= s.y1 && gy < s.y2
+)) ?? null;
+
+const isPodcastBounds = (gx, gy) => podcastStudioAt(gx, gy) != null;
+
+const isPodcastPlatform = (gx, gy, studio = podcastStudioAt(gx, gy)) => {
+  if (!studio) return false;
+  return gx >= studio.platformX1 && gx <= studio.platformX2
+    && gy >= studio.platformY1 && gy <= studio.platformY2;
+};
 
 const roomAt = (x,y) => {
   const ix=Math.floor(x), iy=Math.floor(y);
-  if (isPodcastBounds(ix, iy)) return PODCAST_ROOM;
+  const studio = podcastStudioAt(ix, iy);
+  if (studio) return studio;
   return ROOMS.find(r=>ix>=r.x1&&ix<r.x2&&iy>=r.y1&&iy<r.y2)??null;
 };
 const isStageRoom = (gx, gy) => roomAt(gx, gy)?.id === 'stage';
@@ -309,16 +343,12 @@ const isStageTile = (gx, gy) => (
   gx >= STAGE_PLATFORM_X1 && gx <= STAGE_PLATFORM_X2
   && gy >= STAGE_Y1 && gy <= STAGE_Y2
 );
-const isStageAudience = (gx, gy) => (
-  isStageRoom(gx, gy) && !isStageTile(gx, gy) && !isPodcastBounds(gx, gy)
-);
-
 const randInStageAudience = () => {
   let x;
   let y;
   do {
     x = STAGE_X1 + 1.2 + Math.random() * (STAGE_X2 - STAGE_X1 - 2.4);
-    y = STAGE_Y2 + 1.2 + Math.random() * (NET_Y0 - STAGE_Y2 - 2.2);
+    y = STAGE_Y2 + 1.2 + Math.random() * Math.min(8, NET_Y0 - STAGE_Y2 - 1.5);
   } while (
     isStageTile(Math.floor(x), Math.floor(y))
     || isPodcastBounds(Math.floor(x), Math.floor(y))
@@ -358,15 +388,15 @@ const mergeBoothLayout = () => {
 
 const PLANTS = [
   { _type:'plant', gx:1, gy:NET_Y0+2, kind:'tall' },
-  { _type:'plant', gx:STAGE_X2+1, gy:NET_Y0+2, kind:'tall' },
+  { _type:'plant', gx:VENUE_X2+1, gy:NET_Y0+2, kind:'tall' },
   { _type:'plant', gx:NET_X0+NET_CELL_W-0.5, gy:NET_Y0+3, kind:'fern' },
   { _type:'plant', gx:NET_X0+NET_CELL_W*2-0.5, gy:NET_Y0+3, kind:'fern' },
   { _type:'plant', gx:NET_X0+NET_CELL_W*2-0.5, gy:NET_Y0+NET_CELL_H+3, kind:'fern' },
   { _type:'plant', gx:NET_X0+NET_CELL_W-0.5, gy:NET_Y0+NET_CELL_H*2+3, kind:'fern' },
   { _type:'plant', gx:1, gy:SPONSOR_Y0+2, kind:'pot' },
-  { _type:'plant', gx:STAGE_X2+1, gy:SPONSOR_Y0+2, kind:'pot' },
+  { _type:'plant', gx:VENUE_X2+1, gy:SPONSOR_Y0+2, kind:'pot' },
   { _type:'plant', gx:NET_X0+1, gy:NET_Y0-1.5, kind:'pot' },
-  { _type:'plant', gx:STAGE_X2-1, gy:NET_Y0-1.5, kind:'pot' },
+  { _type:'plant', gx:VENUE_X2-1, gy:NET_Y0-1.5, kind:'pot' },
 ].map(p => ({ ...p, _d: p.gx + p.gy }));
 
 // ─── Characters ───────────────────────────────────────────────────────────────
@@ -425,7 +455,7 @@ const PODCAST_DEFS = [
     name:'Markus V.', title:'Host · Agent Mic',
     bio:'Weekly show on agent-native work, founder stories, and tools that actually ship. Recording live from AgentConf.',
     linkedin:'https://www.linkedin.com/in/markus-vool', color:'#FF6B4A', skin:'#F0D0B0', hair:'#1A1010', pants:'#281818',
-    shirtCode:'shirt-blazer', hairCode:'hair-m-part',
+    shirtCode:'shirt-blazer', hairCode:'hair-m-volume',
   },
   {
     name:'Ines L.', title:'Co-host · Agent Mic', feminine:true,
@@ -433,10 +463,22 @@ const PODCAST_DEFS = [
     linkedin:'https://www.linkedin.com/in/ines-luik', color:'#38E8C0', skin:'#F4C8A8', hair:'#3A2018', pants:'#1A2830',
     shirtCode:'shirt-casual', hairCode:'hair-f-bob',
   },
+  {
+    name:'Oskar T.', title:'Host · Roamcast', bio:'Deep dives on remote work, async teams, and agent tooling for distributed companies.',
+    linkedin:'https://www.linkedin.com/in/oskar-tamm', color:'#60C0FF', skin:'#E8C090', hair:'#182028', pants:'#142030',
+    shirtCode:'shirt-polo', hairCode:'hair-m-volume',
+  },
+  {
+    name:'Liis K.', title:'Co-host · Roamcast', feminine:true,
+    bio:'Roamcast records live at AgentConf — stories from founders building across time zones.',
+    linkedin:'https://www.linkedin.com/in/liis-kask', color:'#B080F0', skin:'#F4C8A0', hair:'#4A2818', pants:'#201828',
+    shirtCode:'shirt-blazer', hairCode:'hair-f-long',
+  },
 ];
-const PODCAST_HOST_POSITIONS = [
-  { x: PODCAST_CX - 1.35, y: PODCAST_CY + 0.55, faceDir: 1 },
-  { x: PODCAST_CX + 1.35, y: PODCAST_CY + 0.55, faceDir: -1 },
+
+const podcastHostPositions = studio => [
+  { x: studio.cx - 1.35, y: studio.cy + 0.55, faceDir: 1 },
+  { x: studio.cx + 1.35, y: studio.cy + 0.55, faceDir: -1 },
 ];
 const PODCAST_CHAT_LINES = [
   'So tell us how you found AgentConf…',
@@ -544,24 +586,30 @@ const initAll = (booths) => {
       isStatic:true, roomId:boothRoomId(b.gx, b.gy),
     });
   });
-  const podcast = PODCAST_DEFS.map((d, i) => {
-    const pos = PODCAST_HOST_POSITIONS[i];
-    return mkAgent(PODCAST_ID_BASE + i, d, pos.x, pos.y, {
-      isStatic: true,
-      roomId: 'podcast',
-      faceDir: pos.faceDir,
+  const podcast = [];
+  PODCAST_STUDIOS.forEach((studio, si) => {
+    const hosts = podcastHostPositions(studio);
+    [0, 1].forEach(hi => {
+      const def = PODCAST_DEFS[si * 2 + hi];
+      const pos = hosts[hi];
+      podcast.push(mkAgent(PODCAST_ID_BASE + si * 2 + hi, def, pos.x, pos.y, {
+        isStatic: true,
+        roomId: studio.id,
+        faceDir: pos.faceDir,
+        studioId: studio.id,
+      }));
     });
-  });
-  if (podcast.length >= 2) {
+    const a = podcast[podcast.length - 2];
+    const b = podcast[podcast.length - 1];
     const msg = PODCAST_CHAT_LINES[Math.floor(Math.random() * PODCAST_CHAT_LINES.length)];
     const dur = Math.min(TALK_MAX_FRAMES, 8 * FPS_ASSUME);
-    podcast[0].meeting = podcast[1].id;
-    podcast[1].meeting = podcast[0].id;
-    podcast[0].talkTimer = dur;
-    podcast[1].talkTimer = dur;
-    podcast[0].talkMsg = msg;
-    podcast[1].talkMsg = msg;
-  }
+    a.meeting = b.id;
+    b.meeting = a.id;
+    a.talkTimer = dur;
+    b.talkTimer = dur;
+    a.talkMsg = msg;
+    b.talkMsg = msg;
+  });
   return { regular, speaker, booth, podcast, nextId: AGENTS_DEF.length };
 };
 
@@ -589,51 +637,50 @@ function drawBlock(ctx,gx,gy,top,sL,sR,h=BH) {
 }
 
 function drawStageBlock(ctx, gx, gy) {
+  const sp = activeTheme.stagePlatform;
   const front = gy === STAGE_Y2;
-  const top = front ? '#4E3878' : '#3A2868';
-  const sL = front ? '#281850' : '#1C1448';
-  const sR = front ? '#3C2868' : '#2C2058';
+  const top = front ? sp.topFront : sp.top;
+  const sL = front ? sp.sLFront : sp.sL;
+  const sR = front ? sp.sRFront : sp.sR;
   drawBlock(ctx, gx, gy, top, sL, sR, SBH);
   const { x, y } = iso(gx, gy);
   const lip = y + TH / 2 + SBH;
   if (front) {
-    ctx.fillStyle = '#C8A040';
+    ctx.fillStyle = sp.lip;
     ctx.fillRect(x - TW / 2 + 3, lip - 4, TW - 6, 3);
-    ctx.fillStyle = '#8A7028';
+    ctx.fillStyle = sp.lipDark;
     ctx.fillRect(x - TW / 2 + 3, lip - 1, TW - 6, 2);
   }
 }
 
-function drawStageAudienceFloor(ctx, gx, gy) {
-  drawBlock(ctx, gx, gy, '#14101E', '#0A0814', '#100C18', BH);
-  const { x, y } = iso(gx, gy);
-  ctx.strokeStyle = 'rgba(168,144,255,0.06)';
-  ctx.strokeRect(x - TW / 2 + 8, y + TH / 2 - 4, TW - 16, 4);
-}
-
 function drawPodcastFloor(ctx, gx, gy) {
-  drawBlock(ctx, gx, gy, '#241810', '#140C08', '#1C140C', BH);
+  const c = activeTheme.podcastFloor;
+  drawBlock(ctx, gx, gy, c.top, c.sL, c.sR, BH);
   const { x, y } = iso(gx, gy);
   ctx.strokeStyle = 'rgba(255,122,88,0.08)';
   ctx.strokeRect(x - TW / 2 + 6, y + TH / 2 - 3, TW - 12, 3);
 }
 
-function drawPodcastPlatform(ctx, gx, gy) {
-  const front = gy === PODCAST_PLATFORM_Y2;
+function drawPodcastPlatform(ctx, gx, gy, studio) {
+  const front = gy === studio.platformY2;
   const top = front ? '#5A4030' : '#4A3428';
   const sL = front ? '#2A1C14' : '#221810';
   const sR = front ? '#3E2C20' : '#302018';
-  drawBlock(ctx, gx, gy, top, sL, sR, PODCAST_PBH);
+  if (studio.id === 'podcast-ne') {
+    drawBlock(ctx, gx, gy, front ? '#4A4858' : '#3A3848', sL, sR, PODCAST_PBH);
+  } else {
+    drawBlock(ctx, gx, gy, top, sL, sR, PODCAST_PBH);
+  }
   const { x, y } = iso(gx, gy);
   const lip = y + TH / 2 + PODCAST_PBH;
   if (front) {
-    ctx.fillStyle = '#E85A40';
+    ctx.fillStyle = studio.accent;
     ctx.fillRect(x - TW / 2 + 4, lip - 3, TW - 8, 2);
   }
 }
 
-function drawPodcastTable(ctx) {
-  const { x, y } = iso(PODCAST_CX, PODCAST_CY + 0.12);
+function drawPodcastTable(ctx, studio) {
+  const { x, y } = iso(studio.cx, studio.cy + 0.12);
   const fy = y + TH / 2 + PODCAST_PBH;
   ctx.fillStyle = '#1A1008';
   ctx.fillRect(x - 3, fy - 2, 6, 10);
@@ -661,14 +708,12 @@ function drawPodcastTable(ctx) {
   });
 }
 
-function drawPodcastScreen(ctx, frame, detail = 1) {
-  const { x, y } = iso(PODCAST_CX, PODCAST_Y1 + 1.1);
+function drawPodcastScreen(ctx, studio, frame, detail = 1) {
+  const { x, y } = iso(studio.cx, studio.y1 + 1.1);
   const fy = y + TH / 2 - PODCAST_PBH - 4;
-  const SW = 96 * detail;
-  const SH = 58 * detail;
+  const SW = 88 * detail;
+  const SH = 52 * detail;
 
-  ctx.fillStyle = '#0A0806';
-  ctx.fillRect(x - SW / 2 - 4, fy - SH - 5, SW + 8, SH + 7);
   ctx.fillStyle = '#120E0C';
   ctx.fillRect(x - SW / 2, fy - SH, SW, SH);
 
@@ -700,12 +745,12 @@ function drawPodcastScreen(ctx, frame, detail = 1) {
   ctx.arc(x, micY - 2 * detail, 5 * detail, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.fillStyle = '#FF8A68';
+  ctx.fillStyle = studio.accent;
   ctx.font = `bold ${fs(11)}`;
   ctx.textAlign = 'center';
-  ctx.fillText('AGENT', x, fy - SH + 38 * detail);
-  ctx.fillStyle = '#38E8C0';
-  ctx.fillText('MIC', x, fy - SH + 50 * detail);
+  ctx.fillText(studio.logo[0], x, fy - SH + 38 * detail);
+  ctx.fillStyle = studio.id === 'podcast-ne' ? '#FF8A68' : '#38E8C0';
+  ctx.fillText(studio.logo[1], x, fy - SH + 50 * detail);
 
   ctx.fillStyle = 'rgba(255,255,255,0.45)';
   ctx.font = fs(5);
@@ -720,42 +765,25 @@ function drawPodcastScreen(ctx, frame, detail = 1) {
 
   ctx.restore();
 
-  ctx.shadowBlur = 14;
-  ctx.shadowColor = 'rgba(255,107,74,0.45)';
-  ctx.strokeStyle = 'rgba(255,122,88,0.8)';
-  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = `${studio.accent}99`;
+  ctx.lineWidth = 1;
   ctx.strokeRect(x - SW / 2, fy - SH, SW, SH);
-  ctx.shadowBlur = 0;
 }
 
-function drawPodcastSet(ctx, frame, detail) {
-  drawPodcastScreen(ctx, frame, detail);
-  drawPodcastTable(ctx);
-  const sign = iso(PODCAST_CX, PODCAST_Y2 - 0.35);
+function drawPodcastStudio(ctx, studio, frame, detail) {
+  drawPodcastScreen(ctx, studio, frame, detail);
+  drawPodcastTable(ctx, studio);
+  const sign = iso(studio.cx, studio.y2 - 0.35);
   ctx.fillStyle = 'rgba(0,0,0,0.5)';
   ctx.fillRect(sign.x - 38, sign.y + TH / 2 - 18, 76, 11);
-  ctx.fillStyle = 'rgba(255,122,88,0.9)';
+  ctx.fillStyle = `${studio.accent}e6`;
   ctx.font = "bold 7px 'Courier New',monospace";
   ctx.textAlign = 'center';
   ctx.fillText('ON AIR', sign.x, sign.y + TH / 2 - 10);
 }
 
-function drawProscenium(ctx) {
-  const { x, y } = iso(STAGE_CX, STAGE_Y1 - 0.2);
-  const fy = y + TH / 2 - SBH + 4;
-  const W = 340;
-  const H = 88;
-  ctx.fillStyle = '#0A0614';
-  ctx.beginPath();
-  ctx.moveTo(x - W / 2, fy - H + 18);
-  ctx.quadraticCurveTo(x, fy - H - 10, x + W / 2, fy - H + 18);
-  ctx.lineTo(x + W / 2 + 10, fy + 6);
-  ctx.lineTo(x - W / 2 - 10, fy + 6);
-  ctx.closePath();
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(200,160,80,0.55)';
-  ctx.lineWidth = 2;
-  ctx.stroke();
+function drawPodcastSet(ctx, frame, detail) {
+  PODCAST_STUDIOS.forEach(s => drawPodcastStudio(ctx, s, frame, detail));
 }
 
 function drawCurtains(ctx) {
@@ -764,7 +792,7 @@ function drawCurtains(ctx) {
     const { x, y } = iso(gx, STAGE_Y1);
     const fy = y + TH / 2 - SBH + 4;
     const w = 20;
-    const h = 78;
+    const h = 92;
     const x0 = side < 0 ? x - w : x;
     const g = ctx.createLinearGradient(x0, fy - h, x0 + side * w, fy);
     g.addColorStop(0, '#5A1038');
@@ -780,7 +808,7 @@ function drawCurtains(ctx) {
 function drawLightTruss(ctx, frame) {
   const { x, y } = iso(STAGE_CX, STAGE_Y1 + 0.2);
   const fy = y + TH / 2 - SBH - 2;
-  const span = 300;
+  const span = Math.min(340, (STAGE_X2 - STAGE_X1) * TW * 0.48);
   ctx.fillStyle = '#18141C';
   ctx.fillRect(x - span / 2, fy - 8, span, 5);
   [-120, -80, -40, 0, 40, 80, 120].forEach((off, i) => {
@@ -814,10 +842,9 @@ function drawPodium(ctx) {
 }
 
 function drawStageSet(ctx, frame, detail) {
-  drawProscenium(ctx);
   drawCurtains(ctx);
-  drawScreen(ctx, frame, detail);
   drawLightTruss(ctx, frame);
+  drawScreen(ctx, frame, detail);
   drawPodium(ctx);
 }
 
@@ -898,23 +925,65 @@ function drawMainDoor(ctx) {
   ctx.fillText('▲ ENTER', arrow.x, arrow.y + 2);
 }
 
+function drawCardinalMarker(ctx, { gx, gy, letter, name, hint, color }) {
+  const p = iso(gx, gy);
+  const y = p.y + TH / 2 - 4;
+  const r = 13;
+
+  ctx.fillStyle = 'rgba(0,0,0,0.68)';
+  ctx.beginPath();
+  ctx.arc(p.x, y, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = `${color}aa`;
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+
+  ctx.fillStyle = color;
+  ctx.font = "bold 12px 'Courier New',monospace";
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(letter, p.x, y + 0.5);
+
+  ctx.fillStyle = 'rgba(255,255,255,0.92)';
+  ctx.font = "bold 7px 'Courier New',monospace";
+  ctx.fillText(name, p.x, y + r + 9);
+
+  if (hint) {
+    ctx.fillStyle = 'rgba(255,255,255,0.42)';
+    ctx.font = "6px 'Courier New',monospace";
+    ctx.fillText(hint, p.x, y + r + 19);
+  }
+}
+
+function drawCardinals(ctx) {
+  const hub = iso(STAGE_CX, MAP_MID_GY);
+  const spokes = CARDINAL_MARKERS.map(m => iso(m.gx, m.gy));
+  ctx.save();
+  ctx.strokeStyle = 'rgba(96,192,255,0.14)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([5, 7]);
+  spokes.forEach(({ x, y }) => {
+    ctx.beginPath();
+    ctx.moveTo(hub.x, hub.y + TH / 2);
+    ctx.lineTo(x, y + TH / 2);
+    ctx.stroke();
+  });
+  ctx.setLineDash([]);
+  ctx.restore();
+
+  CARDINAL_MARKERS.forEach(m => drawCardinalMarker(ctx, m));
+}
+
 function drawScreen(ctx, frame, detail = 1) {
   const { x, y } = iso(STAGE_CX, STAGE_Y1 + 0.35);
-  const fy = y + TH / 2 - SBH - 2;
-  const SW = 128 * detail;
-  const SH = 72 * detail;
+  const fy = y + TH / 2 - SBH - 4;
+  const SW = Math.min(200, (STAGE_X2 - STAGE_X1) * TW * 0.42) * detail;
+  const SH = SW * 0.56;
 
-  // Outer bezel
-  ctx.fillStyle='#030208';
-  ctx.fillRect(x-SW/2-5, fy-SH-6, SW+10, SH+8);
-
-  // Screen panel
-  ctx.fillStyle='#05030F';
-  ctx.fillRect(x-SW/2, fy-SH, SW, SH);
-
-  // Inner content
   ctx.save();
-  ctx.beginPath(); ctx.rect(x-SW/2+2, fy-SH+2, SW-4, SH-4); ctx.clip();
+  ctx.beginPath();
+  ctx.rect(x - SW / 2, fy - SH, SW, SH);
+  ctx.clip();
   const bg=ctx.createLinearGradient(x,fy-SH,x,fy);
   bg.addColorStop(0,'#200C70'); bg.addColorStop(1,'#080838');
   ctx.fillStyle=bg; ctx.fillRect(x-SW/2,fy-SH,SW,SH);
@@ -966,12 +1035,6 @@ function drawScreen(ctx, frame, detail = 1) {
   ctx.fillRect(x-SW/2+6,fy-8,(SW-12)*prog,3);
 
   ctx.restore();
-
-  // Screen glow
-  ctx.shadowBlur=18; ctx.shadowColor='rgba(140,110,255,0.5)';
-  ctx.strokeStyle='rgba(168,144,255,0.75)'; ctx.lineWidth=1.5;
-  ctx.strokeRect(x-SW/2,fy-SH,SW,SH);
-  ctx.shadowBlur=0;
 }
 
 function drawBooth(ctx,gx,gy,label,color,accent,detail=1) {
@@ -1185,7 +1248,7 @@ function feetPos(a) {
   const gx = Math.floor(a.x);
   const gy = Math.floor(a.y);
   const onMainStage = isStageTile(gx, gy);
-  const onPodcast = isPodcastPlatform(gx, gy);
+  const onPodcast = isPodcastPlatform(gx, gy, podcastStudioAt(gx, gy));
   const lift = onMainStage ? SBH : onPodcast ? PODCAST_PBH : 0;
   return { x, y: y + TH / 2 - lift };
 }
@@ -1206,7 +1269,7 @@ const updateAgentFacing = (a, others) => {
 function getDef(a) {
   if (a.id === 99) return SPEAKER_DEF;
   if (a.id >= PODCAST_ID_BASE && a.id < PODCAST_ID_BASE + PODCAST_DEFS.length) {
-    return PODCAST_DEFS[a.id - PODCAST_ID_BASE];
+    return PODCAST_DEFS[a.id - PODCAST_ID_BASE] ?? PODCAST_DEFS[0];
   }
   if (a.id >= 100) return BOOTH_DEFS[a.id - 100] || BOOTH_DEFS[0];
   if (a.id >= AGENTS_DEF.length && a.name) return a;
@@ -1399,6 +1462,10 @@ export default function AgentConf() {
   const [boothDragEnabled, setBoothDragEnabled] = useState(loadBoothDragPref);
   const showAgentNamesRef = useRef(loadAgentNamesPref());
   const [showAgentNames, setShowAgentNames] = useState(loadAgentNamesPref);
+  const showCardinalsRef = useRef(loadCardinalsPref());
+  const [showCardinals, setShowCardinals] = useState(loadCardinalsPref);
+  const [lightsOn, setLightsOn] = useState(loadLightsPref);
+  const themeRef = useRef(themeForLights(loadLightsPref()));
   const movementPausedRef = useRef(false);
   const [movementPaused, setMovementPaused] = useState(false);
   const [stats,setStats] = useState({total:AGENTS_DEF.length,matches:0,convos:0,hot:'—'});
@@ -1415,6 +1482,16 @@ export default function AgentConf() {
   useEffect(() => {
     showAgentNamesRef.current = showAgentNames;
   }, [showAgentNames]);
+
+  useEffect(() => {
+    showCardinalsRef.current = showCardinals;
+  }, [showCardinals]);
+
+  useEffect(() => {
+    themeRef.current = themeForLights(lightsOn);
+    document.documentElement.dataset.theme = lightsOn ? 'light' : 'dark';
+    document.body.style.background = themeRef.current.ui.pageBg;
+  }, [lightsOn]);
 
   useEffect(() => {
     movementPausedRef.current = movementPaused;
@@ -1442,6 +1519,26 @@ export default function AgentConf() {
     });
   };
 
+  const toggleCardinals = () => {
+    setShowCardinals(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('agentconf-cardinals', next ? '1' : '0');
+      } catch { /* noop */ }
+      return next;
+    });
+  };
+
+  const toggleLights = () => {
+    setLightsOn(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('agentconf-lights', next ? '1' : '0');
+      } catch { /* noop */ }
+      return next;
+    });
+  };
+
   const applyFocus = (id, booth = null) => {
     setFocusId(booth ? `booth-${booth.label}` : id);
     const cam = cameraRef.current;
@@ -1450,7 +1547,8 @@ export default function AgentConf() {
       : id === 'stage' ? FOCUS.stage()
       : id === 'floor' ? FOCUS.floor()
       : id === 'door' ? FOCUS.door()
-      : id === 'podcast' ? FOCUS.podcast()
+      : id === 'podcast' || id === 'podcast-nw' ? FOCUS.podcastNw()
+      : id === 'podcast-ne' ? FOCUS.podcastNe()
       : FOCUS.overview();
     focusWorldPoint(cam, f.gx, f.gy, f.zoom);
   };
@@ -1622,9 +1720,7 @@ export default function AgentConf() {
         if (a.talkCooldown > 0 && a.talkTimer === 0) a.talkCooldown--;
       });
 
-      const restartPodcastChat = () => {
-        if (!podcast || podcast.length < 2) return;
-        const [a, b] = podcast;
+      const restartStudioChat = (a, b) => {
         const msg = PODCAST_CHAT_LINES[Math.floor(Math.random() * PODCAST_CHAT_LINES.length)];
         const dur = Math.min(TALK_MAX_FRAMES, 6 * FPS_ASSUME);
         a.meeting = b.id;
@@ -1637,18 +1733,18 @@ export default function AgentConf() {
       (podcast ?? []).forEach(a => {
         if (a.talkTimer > 0) a.talkTimer--;
       });
-      if (
-        podcast?.length >= 2
-        && podcast[0].talkTimer === 0
-        && podcast[1].talkTimer === 0
-        && podcast[0].meeting >= 0
-      ) {
-        podcast[0].meeting = -1;
-        podcast[1].meeting = -1;
-        podcast[0].talkMsg = '';
-        podcast[1].talkMsg = '';
-        restartPodcastChat();
-      }
+      PODCAST_STUDIOS.forEach((_, si) => {
+        const a = podcast[si * 2];
+        const b = podcast[si * 2 + 1];
+        if (!a || !b) return;
+        if (a.talkTimer === 0 && b.talkTimer === 0 && a.meeting >= 0) {
+          a.meeting = -1;
+          b.meeting = -1;
+          a.talkMsg = '';
+          b.talkMsg = '';
+          restartStudioChat(a, b);
+        }
+      });
 
       for (let i = 0; i < regular.length; i++) {
         for (let j = i + 1; j < regular.length; j++) {
@@ -1668,13 +1764,19 @@ export default function AgentConf() {
       const frame=frameRef.current;
       const cam=cameraRef.current;
       const v=viewRef.current;
+      activeTheme = themeRef.current;
       lerpCamera(cam);
 
       ctx.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
-      ctx.fillStyle='#080810'; ctx.fillRect(0,0,v.cw,v.ch);
-      const rad=ctx.createRadialGradient(v.cw/2,v.ch/2,0,v.cw/2,v.ch/2,Math.max(v.cw,v.ch)*0.7);
-      rad.addColorStop(0,'rgba(50,30,100,0.12)'); rad.addColorStop(1,'rgba(0,0,0,0)');
-      ctx.fillStyle=rad; ctx.fillRect(0,0,v.cw,v.ch);
+      ctx.fillStyle = activeTheme.canvasBg;
+      ctx.fillRect(0, 0, v.cw, v.ch);
+      const rad = ctx.createRadialGradient(
+        v.cw / 2, v.ch / 2, 0, v.cw / 2, v.ch / 2, Math.max(v.cw, v.ch) * 0.7,
+      );
+      rad.addColorStop(0, activeTheme.glowInner);
+      rad.addColorStop(1, activeTheme.glowOuter);
+      ctx.fillStyle = rad;
+      ctx.fillRect(0, 0, v.cw, v.ch);
 
       ctx.save();
       ctx.translate(v.offX, v.offY);
@@ -1689,13 +1791,20 @@ export default function AgentConf() {
         for (let gx=Math.max(0,s-GH+1);gx<=Math.min(GW-1,s);gx++) {
           const gy=s-gx; if(gy<0||gy>=GH)continue;
           const r=roomAt(gx,gy);
-          if (isPodcastPlatform(gx, gy)) drawPodcastPlatform(ctx, gx, gy);
-          else if (isPodcastBounds(gx, gy)) drawPodcastFloor(ctx, gx, gy);
+          const podStudio = podcastStudioAt(gx, gy);
+          if (podStudio && isPodcastPlatform(gx, gy, podStudio)) {
+            drawPodcastPlatform(ctx, gx, gy, podStudio);
+          } else if (podStudio) drawPodcastFloor(ctx, gx, gy);
           else if (r) {
             if (isStageTile(gx, gy)) drawStageBlock(ctx, gx, gy);
-            else if (isStageAudience(gx, gy)) drawStageAudienceFloor(ctx, gx, gy);
-            else drawBlock(ctx, gx, gy, r.top, r.sL, r.sR);
-          } else drawTile(ctx,gx,gy,'#0E0E1A','#13132A');
+            else if (r.id === 'floor') {
+              const rc = roomDrawColors(r);
+              drawTile(ctx, gx, gy, rc.top, rc.lc + '33');
+            } else {
+              const rc = roomDrawColors(r);
+              drawBlock(ctx, gx, gy, rc.top, rc.sL, rc.sR);
+            }
+          } else drawTile(ctx, gx, gy, activeTheme.voidTile, activeTheme.voidStroke);
         }
 
       drawStageSet(ctx, frame, detail);
@@ -1705,18 +1814,22 @@ export default function AgentConf() {
       // Room labels
       ROOM_LABELS.forEach(r=>{
         const cx = (r.x1 + r.x2) / 2;
-        const cy = r.id === 'stage' ? (STAGE_Y2 + NET_Y0) / 2
-          : r.id === 'podcast' ? PODCAST_CY
+        const cy = r.id === 'stage' ? (STAGE_Y1 + STAGE_Y2) / 2
+          : r.id?.startsWith('podcast') ? r.cy
           : (r.y1 + r.y2) / 2;
         const p = iso(cx, cy);
+        const rc = roomDrawColors(r);
         ctx.font="bold 8px 'Courier New',monospace"; ctx.textAlign='center';
         const label=`${r.icon} ${r.name.toUpperCase()}`;
         const lw=ctx.measureText(label).width;
-        ctx.fillStyle='rgba(0,0,0,0.6)';
+        const labelBg = activeTheme.id === 'light' ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.6)';
+        ctx.fillStyle = labelBg;
         ctx.fillRect(p.x-lw/2-5,p.y+TH/2-20,lw+10,13);
-        ctx.strokeStyle=r.lc+'44'; ctx.lineWidth=0.5;
+        ctx.strokeStyle = rc.lc + '44';
+        ctx.lineWidth = 0.5;
         ctx.strokeRect(p.x-lw/2-5,p.y+TH/2-20,lw+10,13);
-        ctx.fillStyle=r.lc; ctx.fillText(label,p.x,p.y+TH/2-11);
+        ctx.fillStyle = rc.lc;
+        ctx.fillText(label, p.x, p.y + TH / 2 - 11);
       });
 
       // Collect + depth-sort all renderables
@@ -1766,12 +1879,16 @@ export default function AgentConf() {
         if (a.watchTimer > 0) drawWatchDialog(ctx, a, frame);
       });
 
+      if (showCardinalsRef.current) drawCardinals(ctx);
+
       ctx.restore();
 
       // Vignette (screen space)
       const vig=ctx.createRadialGradient(v.cw/2,v.ch/2,v.ch*0.25,v.cw/2,v.ch/2,Math.max(v.cw,v.ch)*0.75);
-      vig.addColorStop(0,'rgba(0,0,0,0)'); vig.addColorStop(1,'rgba(0,0,0,0.45)');
-      ctx.fillStyle=vig; ctx.fillRect(0,0,v.cw,v.ch);
+      vig.addColorStop(0, 'rgba(0,0,0,0)');
+      vig.addColorStop(1, activeTheme.vignetteEnd);
+      ctx.fillStyle = vig;
+      ctx.fillRect(0, 0, v.cw, v.ch);
     }
 
     function tick(){
@@ -1935,9 +2052,10 @@ export default function AgentConf() {
         focusWorldPoint(cam, f.gx, f.gy, f.zoom);
       } else {
         const { gx, gy } = worldToBoothPos(w.x, w.y);
-        if (isPodcastBounds(gx, gy) || isPodcastPlatform(gx, gy)) {
-          setFocusId('podcast');
-          const f = FOCUS.podcast();
+        const podHit = podcastStudioAt(gx, gy);
+        if (podHit) {
+          setFocusId(podHit.focusId);
+          const f = podHit.id === 'podcast-ne' ? FOCUS.podcastNe() : FOCUS.podcastNw();
           focusWorldPoint(cam, f.gx, f.gy, f.zoom);
         } else if (isStageRoom(gx, gy) || isStageTile(gx, gy)) {
           setFocusId('stageScreen');
@@ -1983,39 +2101,43 @@ export default function AgentConf() {
     };
   }, []);
 
+  const ui = themeForLights(lightsOn);
   const btn = (active, accent) => ({
-    background: active ? `${accent}22` : 'rgba(255,255,255,0.03)',
-    border: `1px solid ${active ? accent + '88' : 'rgba(255,255,255,0.08)'}`,
+    background: active ? `${accent}22` : ui.btnInactiveBg,
+    border: `1px solid ${active ? accent + '88' : ui.btnInactiveBorder}`,
     borderRadius: 4,
     padding: '5px 10px',
     fontSize: 10,
-    color: active ? accent : 'rgba(255,255,255,0.55)',
+    color: active ? accent : ui.btnInactiveColor,
     cursor: 'pointer',
     letterSpacing: '0.5px',
     fontFamily: "'Courier New',monospace",
   });
 
   const overlay = {
-    background:'rgba(5,5,12,0.82)',
-    border:'1px solid rgba(255,255,255,0.08)',
-    borderRadius:6,
-    backdropFilter:'blur(8px)',
+    background: ui.overlayBg,
+    border: `1px solid ${ui.overlayBorder}`,
+    borderRadius: 6,
+    backdropFilter: 'blur(8px)',
   };
 
   return (
     <div ref={wrapRef} style={{
       position:'fixed', inset:0, overflow:'hidden',
-      background:'#050508', fontFamily:"'Courier New',monospace", color:'white',
+      background: ui.pageBg,
+      fontFamily:"'Courier New',monospace",
+      color: ui.color,
+      transition: 'background 0.35s ease, color 0.35s ease',
     }}>
       <canvas ref={canvasRef} style={{display:'block', touchAction:'none'}}/>
 
       <div style={{position:'absolute',top:12,left:12,...overlay,padding:'10px 14px',pointerEvents:'none'}}>
         <div style={{fontSize:18,fontWeight:700,letterSpacing:'2px',
-                     background:'linear-gradient(90deg,#A890FF,#60C0FF)',
+                     background: ui.titleGradient,
                      WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>
           ◈ AGENTCONF 2026
         </div>
-        <div style={{fontSize:9,color:'#555',marginTop:4,letterSpacing:'1px'}}>
+        <div style={{fontSize:9,color:ui.muted,marginTop:4,letterSpacing:'1px'}}>
           ● LIVE · {roamingCount} AGENTS · PALDISKI
         </div>
         <div style={{display:'flex',gap:16,marginTop:10}}>
@@ -2023,7 +2145,7 @@ export default function AgentConf() {
             ['CONVOS',stats.convos,'#50E890'],['BUSIEST',stats.hot,'#FFB840']].map(([l,v,c])=>(
             <div key={l}>
               <div style={{fontSize:16,fontWeight:700,color:c,lineHeight:1}}>{v}</div>
-              <div style={{fontSize:7,color:'#444',letterSpacing:'1px'}}>{l}</div>
+              <div style={{fontSize:7,color:ui.dim,letterSpacing:'1px'}}>{l}</div>
             </div>
           ))}
         </div>
@@ -2033,7 +2155,7 @@ export default function AgentConf() {
                    ...overlay,padding:6,pointerEvents:'auto'}}>
         <button type="button" style={btn(false,'#A890FF')}
           onClick={()=>zoomAtScreen(cameraRef.current,viewRef.current.cw/2,viewRef.current.ch/2,ZOOM_STEP,viewRef.current)} title="Zoom in">+</button>
-        <div style={{fontSize:9,color:'#666',textAlign:'center',padding:'2px 0'}}>{zoomPct}%</div>
+        <div style={{fontSize:9,color:ui.zoomLabel,textAlign:'center',padding:'2px 0'}}>{zoomPct}%</div>
         <button type="button" style={btn(false,'#A890FF')}
           onClick={()=>zoomAtScreen(cameraRef.current,viewRef.current.cw/2,viewRef.current.ch/2,1/ZOOM_STEP,viewRef.current)} title="Zoom out">−</button>
         <button type="button" style={{...btn(focusId==='overview','#888'),marginTop:4,fontSize:8}}
@@ -2044,13 +2166,23 @@ export default function AgentConf() {
                    pointerEvents:'none'}}>
         <div style={{...overlay,padding:'8px 12px',display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',
                      pointerEvents:'auto'}}>
-          <span style={{fontSize:8,color:'#444',letterSpacing:'1px'}}>FOCUS</span>
+          <button
+            type="button"
+            style={btn(lightsOn, '#FFD060')}
+            onClick={toggleLights}
+            title={lightsOn ? 'Turn venue lights off (dark mode)' : 'Turn venue lights on (light mode)'}
+          >
+            {lightsOn ? '💡 LIGHTS ON' : '🌙 LIGHTS OFF'}
+          </button>
+          <span style={{fontSize:8,color:ui.dim,letterSpacing:'1px'}}>FOCUS</span>
           <button type="button" style={btn(focusId==='stage','#A890FF')}
             onClick={()=>applyFocus('stage')}>🎤 MAIN STAGE</button>
           <button type="button" style={btn(focusId==='stageScreen','#A890FF')}
             onClick={()=>applyFocus('stageScreen')}>📺 SCREEN</button>
-          <button type="button" style={btn(focusId==='podcast','#FF7A58')}
-            onClick={()=>applyFocus('podcast')}>🎙️ PODCAST</button>
+          <button type="button" style={btn(focusId==='podcast-nw','#FF7A58')}
+            onClick={()=>applyFocus('podcast-nw')}>🎙️ POD NW</button>
+          <button type="button" style={btn(focusId==='podcast-ne','#38E8C0')}
+            onClick={()=>applyFocus('podcast-ne')}>🎙️ POD NE</button>
           <button type="button" style={btn(focusId==='floor','#60C0FF')}
             onClick={()=>applyFocus('floor')}>🏛️ EXPO FLOOR</button>
           <button
@@ -2068,6 +2200,14 @@ export default function AgentConf() {
             title={showAgentNames ? 'Hide agent name labels' : 'Show agent name labels'}
           >
             {showAgentNames ? '◎ NAMES ON' : '◎ NAMES OFF'}
+          </button>
+          <button
+            type="button"
+            style={btn(showCardinals, '#88B8E8')}
+            onClick={toggleCardinals}
+            title={showCardinals ? 'Hide N/E/S/W placement markers' : 'Show N/E/S/W placement markers'}
+          >
+            {showCardinals ? '⊕ COMPASS ON' : '⊕ COMPASS OFF'}
           </button>
           <button
             type="button"
@@ -2101,15 +2241,16 @@ export default function AgentConf() {
           >
             🚪 ENTRANCE
           </button>
-          <span style={{fontSize:8,color:'#333',marginLeft:'auto'}}>
+          <span style={{fontSize:8,color:ui.hint,marginLeft:'auto'}}>
             {movementPaused ? 'agents paused · ' : ''}
+            {showCardinals ? 'N/S/E/W for placement · ' : ''}
             {boothDragEnabled ? 'drag booths · ' : ''}click booth/agent · pan map
           </span>
         </div>
 
         <div style={{...overlay,padding:'8px 12px',display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',
                      pointerEvents:'auto'}}>
-          <span style={{fontSize:8,color:'#444',letterSpacing:'1px'}}>BOOTHS</span>
+          <span style={{fontSize:8,color:ui.dim,letterSpacing:'1px'}}>BOOTHS</span>
           {booths.map(b=>(
             <button key={b.label} type="button"
               style={btn(focusId===`booth-${b.label}`, b.accent)}
@@ -2132,6 +2273,7 @@ export default function AgentConf() {
           ]
           : []}
         getDef={getDef}
+        theme={themeForLights(lightsOn)}
       />
 
       {selectedProfile && (
@@ -2141,7 +2283,7 @@ export default function AgentConf() {
           style={{
             position:'fixed', inset:0, zIndex:100,
             display:'flex', alignItems:'center', justifyContent:'center',
-            background:'rgba(0,0,0,0.65)', backdropFilter:'blur(4px)',
+            background: ui.modalBackdrop, backdropFilter:'blur(4px)',
             padding:24, pointerEvents:'auto',
           }}
           onClick={() => setSelectedProfile(null)}
@@ -2149,7 +2291,7 @@ export default function AgentConf() {
           <div
             style={{
               width:'100%', maxWidth:380,
-              background:'linear-gradient(160deg,#12101C 0%,#0A0812 100%)',
+              background: ui.modalBg,
               border:`1px solid ${selectedProfile.color}55`,
               borderRadius:10, padding:'22px 24px',
               boxShadow:`0 0 40px ${selectedProfile.color}33`,
@@ -2169,7 +2311,7 @@ export default function AgentConf() {
                   <div id="agent-profile-title" style={{fontSize:16,fontWeight:700,color:selectedProfile.color}}>
                     {selectedProfile.name}
                   </div>
-                  <div style={{fontSize:10,color:'#888',marginTop:4,letterSpacing:'0.5px'}}>
+                  <div style={{fontSize:10,color:ui.panelMuted,marginTop:4,letterSpacing:'0.5px'}}>
                     {selectedProfile.title}
                   </div>
                 </div>
@@ -2179,26 +2321,27 @@ export default function AgentConf() {
                 aria-label="Close"
                 onClick={() => setSelectedProfile(null)}
                 style={{
-                  background:'transparent', border:'none', color:'#666',
+                  background:'transparent', border:'none', color:ui.panelSubtle,
                   fontSize:18, cursor:'pointer', lineHeight:1, padding:4,
                 }}
               >×</button>
             </div>
 
             <p style={{
-              fontSize:11, color:'#AAA', lineHeight:1.65, margin:'16px 0 12px',
-              borderTop:'1px solid rgba(255,255,255,0.06)', paddingTop:14,
+              fontSize:11, color:ui.panelText, lineHeight:1.65, margin:'16px 0 12px',
+              borderTop:`1px solid ${ui.panelDivider}`, paddingTop:14,
             }}>
               {selectedProfile.bio}
             </p>
 
             {selectedProfile.hairCode && (
               <div style={{
-                fontSize:9, color:'#666', lineHeight:1.6, marginBottom:14,
+                fontSize:9, color:ui.panelSubtle, lineHeight:1.6, marginBottom:14,
                 fontFamily: "'Courier New',monospace",
-                background:'rgba(0,0,0,0.25)', padding:'8px 10px', borderRadius:4,
+                background: themeForLights(lightsOn).id === 'light' ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.25)',
+                padding:'8px 10px', borderRadius:4,
               }}>
-                <div style={{ color:'#888', marginBottom:4, letterSpacing:'0.5px' }}>APPEARANCE CODES</div>
+                <div style={{ color:ui.panelMuted, marginBottom:4, letterSpacing:'0.5px' }}>APPEARANCE CODES</div>
                 hair: {selectedProfile.hairCode}<br />
                 eyes: {selectedProfile.eyesCode}<br />
                 mouth: {selectedProfile.mouthCode}<br />

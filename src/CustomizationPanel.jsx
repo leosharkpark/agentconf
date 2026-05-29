@@ -2,9 +2,10 @@ import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import {
   CUSTOMIZATION_CATALOG,
   PREVIEW_APPEARANCE,
-  drawAgentFigure,
+  drawAppearancePreview,
   resolveAppearance,
 } from './agentCustomization.js';
+import { THEME_DARK } from './theme.js';
 
 const CATEGORIES = [
   { id: 'hair', label: 'Hair' },
@@ -33,7 +34,6 @@ const DEFAULT_PREVIEW_PARTS = {
 
 const PREVIEW_W = 168;
 const PREVIEW_H = 210;
-const PREVIEW_SCALE = 3;
 
 const mono = "'Courier New',monospace";
 
@@ -42,7 +42,7 @@ const isMasculineHair = code => code?.startsWith('hair-m-');
 const isFeminineTrousers = code => code === 'trouser-skirt' || code === 'trouser-wide';
 const isMasculineTrousers = code => code === 'trouser-straight' || code === 'trouser-slim';
 
-export default function CustomizationPanel({ open, onClose, agents = [], getDef }) {
+export default function CustomizationPanel({ open, onClose, agents = [], getDef, theme = THEME_DARK }) {
   const previewRef = useRef(null);
   const frameRef = useRef(0);
   const [category, setCategory] = useState('hair');
@@ -62,6 +62,9 @@ export default function CustomizationPanel({ open, onClose, agents = [], getDef 
     trousers: previewParts.trousers,
     mouth: category === 'mouth' && showTalkingMouth ? 'mouth-talk' : previewParts.mouth,
   }), [previewParts, category, showTalkingMouth]);
+
+  const previewAppearanceRef = useRef(previewAppearance);
+  previewAppearanceRef.current = previewAppearance;
 
   const agentRows = useMemo(() => {
     if (!getDef) return [];
@@ -108,25 +111,20 @@ export default function CustomizationPanel({ open, onClose, agents = [], getDef 
       frameRef.current += 1;
       const ctx = canvas.getContext('2d');
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, PREVIEW_W, PREVIEW_H);
-      ctx.fillStyle = '#0E0E18';
-      ctx.fillRect(0, 0, PREVIEW_W, PREVIEW_H);
-      drawAgentFigure(
+      drawAppearancePreview(
         ctx,
-        PREVIEW_W / 2,
-        PREVIEW_H - 16,
-        previewAppearance,
-        { walk: Math.sin(frameRef.current * 0.1) * 0.25, bob: 0, faceDir: 1 },
-        false,
-        '',
-        '',
-        PREVIEW_SCALE,
+        PREVIEW_W,
+        PREVIEW_H,
+        previewAppearanceRef.current,
+        frameRef.current,
+        2.35,
+        theme.ui.previewBg,
       );
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [open, previewAppearance]);
+  }, [open, theme]);
 
   if (!open) return null;
 
@@ -135,7 +133,9 @@ export default function CustomizationPanel({ open, onClose, agents = [], getDef 
     return o.gender === 'all' || o.gender === filterGender;
   });
 
-  const labelStyle = { fontSize: 11, color: '#888', lineHeight: 1.45 };
+  const ui = theme.ui;
+  const labelStyle = { fontSize: 11, color: ui.panelMuted, lineHeight: 1.45 };
+  const tabBorder = theme.id === 'light' ? 'rgba(40,55,90,0.2)' : 'rgba(255,255,255,0.12)';
 
   return (
     <div
@@ -147,7 +147,7 @@ export default function CustomizationPanel({ open, onClose, agents = [], getDef 
         zIndex: 110,
         display: 'flex',
         justifyContent: 'flex-end',
-        background: 'rgba(0,0,0,0.55)',
+        background: ui.panelScrim,
         backdropFilter: 'blur(3px)',
         pointerEvents: 'auto',
       }}
@@ -158,18 +158,18 @@ export default function CustomizationPanel({ open, onClose, agents = [], getDef 
         style={{
           width: 'min(520px, 100vw)',
           height: '100%',
-          background: 'linear-gradient(180deg,#12101C 0%,#080810 100%)',
-          borderLeft: '1px solid rgba(96,192,255,0.25)',
+          background: ui.panelBg,
+          borderLeft: `1px solid ${ui.panelBorder}`,
           display: 'flex',
           flexDirection: 'column',
           fontFamily: mono,
-          color: '#ddd',
+          color: ui.panelText,
           fontSize: 13,
         }}
       >
         <div style={{
           padding: '16px 18px',
-          borderBottom: '1px solid rgba(255,255,255,0.08)',
+          borderBottom: `1px solid ${ui.panelDivider}`,
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
@@ -178,7 +178,7 @@ export default function CustomizationPanel({ open, onClose, agents = [], getDef 
             <div style={{ fontSize: 17, fontWeight: 700, color: '#A890FF', letterSpacing: '1px' }}>
               AGENT CUSTOMIZATION
             </div>
-            <div style={{ fontSize: 12, color: '#777', marginTop: 6 }}>
+            <div style={{ fontSize: 12, color: ui.panelMuted, marginTop: 6 }}>
               Codes for hair, eyes, mouth, shirt, trousers
             </div>
           </div>
@@ -189,7 +189,7 @@ export default function CustomizationPanel({ open, onClose, agents = [], getDef 
             style={{
               background: 'transparent',
               border: 'none',
-              color: '#888',
+              color: ui.panelMuted,
               fontSize: 26,
               cursor: 'pointer',
               lineHeight: 1,
@@ -199,7 +199,7 @@ export default function CustomizationPanel({ open, onClose, agents = [], getDef 
           </button>
         </div>
 
-        <div style={{ padding: '12px 14px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        <div style={{ padding: '12px 14px', borderBottom: `1px solid ${ui.panelDivider}` }}>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {CATEGORIES.map(c => (
               <button
@@ -212,9 +212,9 @@ export default function CustomizationPanel({ open, onClose, agents = [], getDef 
                   fontFamily: mono,
                   cursor: 'pointer',
                   borderRadius: 5,
-                  border: `1px solid ${category === c.id ? '#60C0FF88' : 'rgba(255,255,255,0.12)'}`,
+                  border: `1px solid ${category === c.id ? '#60C0FF88' : tabBorder}`,
                   background: category === c.id ? 'rgba(96,192,255,0.18)' : 'transparent',
-                  color: category === c.id ? '#60C0FF' : '#aaa',
+                  color: category === c.id ? '#60C0FF' : ui.panelMuted,
                 }}
               >
                 {c.label}
@@ -222,7 +222,7 @@ export default function CustomizationPanel({ open, onClose, agents = [], getDef 
             ))}
           </div>
           <div style={{ display: 'flex', gap: 10, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 11, color: '#666' }}>FILTER</span>
+            <span style={{ fontSize: 11, color: ui.panelSubtle }}>FILTER</span>
             {['all', 'm', 'f'].map(g => (
               <button
                 key={g}
@@ -233,10 +233,10 @@ export default function CustomizationPanel({ open, onClose, agents = [], getDef 
                   padding: '4px 10px',
                   fontFamily: mono,
                   cursor: 'pointer',
-                  border: '1px solid rgba(255,255,255,0.14)',
+                  border: `1px solid ${tabBorder}`,
                   borderRadius: 4,
-                  background: filterGender === g ? 'rgba(255,255,255,0.1)' : 'transparent',
-                  color: filterGender === g ? '#eee' : '#888',
+                  background: filterGender === g ? ui.btnInactiveBg : 'transparent',
+                  color: filterGender === g ? ui.panelText : ui.panelMuted,
                 }}
               >
                 {g === 'all' ? 'ALL' : g === 'm' ? 'MEN' : 'WOMEN'}
@@ -245,7 +245,7 @@ export default function CustomizationPanel({ open, onClose, agents = [], getDef 
             <label style={{
               marginLeft: 'auto',
               fontSize: 12,
-              color: '#aaa',
+              color: ui.panelMuted,
               display: 'flex',
               gap: 6,
               alignItems: 'center',
@@ -262,7 +262,7 @@ export default function CustomizationPanel({ open, onClose, agents = [], getDef 
           {category === 'mouth' && (
             <label style={{
               fontSize: 12,
-              color: '#aaa',
+              color: ui.panelMuted,
               display: 'flex',
               gap: 6,
               alignItems: 'center',
@@ -284,7 +284,7 @@ export default function CustomizationPanel({ open, onClose, agents = [], getDef 
             flex: 1,
             overflowY: 'auto',
             padding: '10px 12px',
-            borderRight: '1px solid rgba(255,255,255,0.06)',
+            borderRight: `1px solid ${ui.panelDivider}`,
           }}>
             {options.map(opt => (
               <button
@@ -299,19 +299,19 @@ export default function CustomizationPanel({ open, onClose, agents = [], getDef 
                   borderRadius: 6,
                   cursor: 'pointer',
                   fontFamily: mono,
-                  border: `1px solid ${selectedCode === opt.code ? '#A890FF88' : 'rgba(255,255,255,0.1)'}`,
-                  background: selectedCode === opt.code ? 'rgba(168,144,255,0.15)' : 'rgba(255,255,255,0.03)',
-                  color: '#ddd',
+                  border: `1px solid ${selectedCode === opt.code ? '#A890FF88' : tabBorder}`,
+                  background: selectedCode === opt.code ? 'rgba(168,144,255,0.15)' : ui.btnInactiveBg,
+                  color: ui.panelText,
                 }}
               >
                 <div style={{
                   fontSize: 13,
                   fontWeight: 700,
-                  color: selectedCode === opt.code ? '#A890FF' : '#ccc',
+                  color: selectedCode === opt.code ? '#A890FF' : ui.panelText,
                 }}>
                   {opt.code}
                 </div>
-                <div style={{ fontSize: 12, color: '#999', marginTop: 4 }}>{opt.name}</div>
+                <div style={{ fontSize: 12, color: ui.panelMuted, marginTop: 4 }}>{opt.name}</div>
                 <div style={{ ...labelStyle, marginTop: 6 }}>{opt.desc}</div>
               </button>
             ))}
@@ -325,7 +325,7 @@ export default function CustomizationPanel({ open, onClose, agents = [], getDef 
             alignItems: 'center',
             flexShrink: 0,
           }}>
-            <div style={{ fontSize: 11, color: '#666', marginBottom: 8, letterSpacing: '0.5px' }}>
+            <div style={{ fontSize: 11, color: ui.panelSubtle, marginBottom: 8, letterSpacing: '0.5px' }}>
               FULL PREVIEW
             </div>
             <canvas
@@ -333,7 +333,7 @@ export default function CustomizationPanel({ open, onClose, agents = [], getDef 
               style={{
                 borderRadius: 8,
                 border: '1px solid rgba(96,192,255,0.35)',
-                background: '#0E0E18',
+                background: ui.previewBg,
                 display: 'block',
               }}
             />
@@ -350,9 +350,9 @@ export default function CustomizationPanel({ open, onClose, agents = [], getDef 
               marginTop: 10,
               width: '100%',
               fontSize: 11,
-              color: '#666',
+              color: ui.panelSubtle,
               lineHeight: 1.55,
-              background: 'rgba(0,0,0,0.3)',
+              background: theme.id === 'light' ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.3)',
               padding: '8px 10px',
               borderRadius: 5,
             }}>
@@ -360,8 +360,8 @@ export default function CustomizationPanel({ open, onClose, agents = [], getDef 
                 const code = previewParts[CATEGORY_KEYS[c.id]];
                 const active = c.id === category;
                 return (
-                  <div key={c.id} style={{ color: active ? '#A890FF' : '#777' }}>
-                    {c.label}: <span style={{ color: active ? '#ddd' : '#999' }}>{code}</span>
+                  <div key={c.id} style={{ color: active ? '#A890FF' : ui.panelMuted }}>
+                    {c.label}: <span style={{ color: active ? ui.panelText : ui.panelMuted }}>{code}</span>
                   </div>
                 );
               })}
@@ -373,19 +373,19 @@ export default function CustomizationPanel({ open, onClose, agents = [], getDef 
           flex: '0 0 36%',
           minHeight: 150,
           overflowY: 'auto',
-          borderTop: '1px solid rgba(255,255,255,0.08)',
+          borderTop: `1px solid ${ui.panelDivider}`,
           padding: '12px 14px',
         }}>
-          <div style={{ fontSize: 12, color: '#666', letterSpacing: '1px', marginBottom: 8 }}>
+          <div style={{ fontSize: 12, color: ui.panelSubtle, letterSpacing: '1px', marginBottom: 8 }}>
             AGENTS IN WORLD ({agentRows.length})
           </div>
-          <div style={{ fontSize: 11, color: '#555', marginBottom: 10, lineHeight: 1.5 }}>
+          <div style={{ fontSize: 11, color: ui.panelMuted, marginBottom: 10, lineHeight: 1.5 }}>
             Set overrides in AGENTS_DEF e.g.{' '}
-            <span style={{ color: '#60C0FF' }}>hairCode: &apos;hair-m-part&apos;</span>
+            <span style={{ color: '#60C0FF' }}>hairCode: &apos;hair-m-volume&apos;</span>
           </div>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
-              <tr style={{ color: '#777', textAlign: 'left', fontSize: 12 }}>
+              <tr style={{ color: ui.panelMuted, textAlign: 'left', fontSize: 12 }}>
                 <th style={{ padding: '6px 4px' }}>Name</th>
                 <th>hair</th>
                 <th>eyes</th>
@@ -398,7 +398,7 @@ export default function CustomizationPanel({ open, onClose, agents = [], getDef 
               {agentRows.map(row => (
                 <tr
                   key={row.id}
-                  style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}
+                  style={{ borderTop: `1px solid ${ui.panelDivider}` }}
                 >
                   <td style={{
                     padding: '5px 4px',
@@ -406,7 +406,7 @@ export default function CustomizationPanel({ open, onClose, agents = [], getDef 
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
-                    color: '#bbb',
+                    color: ui.panelText,
                   }}>
                     {row.name}
                   </td>
@@ -415,7 +415,7 @@ export default function CustomizationPanel({ open, onClose, agents = [], getDef 
                       key={key}
                       style={{
                         padding: '5px 3px',
-                        color: row[key] === previewParts[key] ? '#A890FF' : '#777',
+                        color: row[key] === previewParts[key] ? '#A890FF' : ui.panelMuted,
                         fontWeight: row[key] === previewParts[key] ? 700 : 400,
                       }}
                     >

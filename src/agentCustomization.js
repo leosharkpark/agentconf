@@ -3,7 +3,6 @@
 export const CUSTOMIZATION_CATALOG = {
   hair: [
     { code: 'hair-m-crop', name: 'Short Crop', gender: 'm', desc: 'Tight sides, minimal top.' },
-    { code: 'hair-m-part', name: 'Side Part', gender: 'm', desc: 'Fuller top with side part.' },
     { code: 'hair-m-volume', name: 'Neat Volume', gender: 'm', desc: 'Taller crown, business cut.' },
     { code: 'hair-f-long', name: 'Long Layers', gender: 'f', desc: 'Side locks and long top.' },
     { code: 'hair-f-bob', name: 'Bob', gender: 'f', desc: 'Chin-length bob.' },
@@ -33,7 +32,7 @@ export const CUSTOMIZATION_CATALOG = {
   ],
 };
 
-const MEN_HAIR = ['hair-m-crop', 'hair-m-part', 'hair-m-volume'];
+const MEN_HAIR = ['hair-m-crop', 'hair-m-volume'];
 const WOMEN_HAIR = ['hair-f-long', 'hair-f-bob', 'hair-f-updo'];
 
 const shade = (hex, amt) => {
@@ -58,8 +57,10 @@ const roundRect = (ctx, x, y, w, h, r) => {
 };
 
 const hairStyleFor = (def, id = 0) => {
-  if (def.hairStyle != null) return def.hairStyle % 3;
-  return ((id * 13) + (def.name?.charCodeAt(0) ?? 0) + (def.name?.charCodeAt(1) ?? 0)) % 3;
+  const pool = def.feminine ? WOMEN_HAIR : MEN_HAIR;
+  const n = pool.length;
+  if (def.hairStyle != null) return def.hairStyle % n;
+  return ((id * 13) + (def.name?.charCodeAt(0) ?? 0) + (def.name?.charCodeAt(1) ?? 0)) % n;
 };
 
 const pickDefaultHair = (def, id) => {
@@ -142,6 +143,9 @@ const BDW = 10;
 const AH = 10;
 const AW = 3.2;
 const HR = 6;
+/** Y offset from torsoTop where sleeves attach (top of shirt). */
+const SHOULDER_Y = 1.4;
+const SLEEVE_CAP = 1.6;
 
 const limb = (ctx, hx, hy, w, h, angle, color, round = 1.2) => {
   ctx.save();
@@ -149,6 +153,16 @@ const limb = (ctx, hx, hy, w, h, angle, color, round = 1.2) => {
   ctx.rotate(angle);
   ctx.fillStyle = color;
   roundRect(ctx, -w / 2, 0, w, h, round);
+  ctx.fill();
+  ctx.restore();
+};
+
+const drawSleeve = (ctx, hx, hy, w, h, angle, color) => {
+  ctx.save();
+  ctx.translate(hx, hy);
+  ctx.rotate(angle);
+  ctx.fillStyle = color;
+  roundRect(ctx, -w / 2, -SLEEVE_CAP, w, h + SLEEVE_CAP, 1.4);
   ctx.fill();
   ctx.restore();
 };
@@ -162,32 +176,26 @@ function drawHairByCode(ctx, x, hy, hr, color, code) {
       ctx.lineTo(x, hy - 1.2);
       ctx.closePath();
       ctx.fill();
-      ctx.fillRect(x - hr - 0.3, hy - 0.5, 1.4, hr * 0.45);
-      ctx.fillRect(x + hr - 1.1, hy - 0.5, 1.4, hr * 0.45);
-      break;
-    case 'hair-m-part':
       ctx.beginPath();
-      ctx.arc(x, hy - 0.5, hr + 0.35, Math.PI * 1.05, Math.PI * 1.95);
-      ctx.lineTo(x, hy - 1.5);
+      ctx.moveTo(x - hr + 0.1, hy - 0.82);
+      ctx.lineTo(x - hr - 0.35, hy + 0.2);
+      ctx.lineTo(x - hr + 0.55, hy + 0.12);
+      ctx.lineTo(x - hr + 0.2, hy - 0.55);
       ctx.closePath();
       ctx.fill();
       ctx.beginPath();
-      ctx.moveTo(x - hr * 0.15, hy - 0.8);
-      ctx.lineTo(x - hr - 0.5, hy + 0.8);
-      ctx.lineTo(x - hr + 0.2, hy + 0.5);
+      ctx.moveTo(x + hr - 0.1, hy - 0.82);
+      ctx.lineTo(x + hr + 0.35, hy + 0.2);
+      ctx.lineTo(x + hr - 0.55, hy + 0.12);
+      ctx.lineTo(x + hr - 0.2, hy - 0.55);
       ctx.closePath();
       ctx.fill();
-      ctx.fillRect(x + hr - 1, hy - 0.2, 1.2, hr * 0.5);
       break;
     case 'hair-m-volume':
       ctx.beginPath();
       ctx.arc(x, hy - 0.8, hr + 0.55, Math.PI * 1.02, Math.PI * 1.98);
       ctx.lineTo(x, hy - 2);
       ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = shade(color, -18);
-      ctx.beginPath();
-      ctx.arc(x, hy - 1.1, hr * 0.55, 0, Math.PI * 2);
       ctx.fill();
       break;
     case 'hair-f-long':
@@ -220,13 +228,8 @@ function drawHairByCode(ctx, x, hy, hr, color, code) {
       ctx.ellipse(x + hr * 0.55, hy + 0.3, 1.5, hr * 0.38, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.beginPath();
-      ctx.arc(x, hy - 1.8, hr * 0.42, 0, Math.PI * 2);
+      ctx.arc(x, hy - 2.85, hr * 0.4, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = shade(color, -22);
-      ctx.beginPath();
-      ctx.arc(x, hy - 1.85, hr * 0.28, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = color;
       ctx.beginPath();
       ctx.arc(x, hy - 0.5, hr + 0.2, Math.PI * 1.1, Math.PI * 1.9);
       ctx.lineTo(x, hy - 1.3);
@@ -395,33 +398,59 @@ function drawTrousersByCode(ctx, code, bdw, bdh, lh, trouserColor, walk) {
 }
 
 function drawShirtByCode(ctx, code, bdw, bdh, torsoTop, shirtColor) {
-  const shoulderY = torsoTop + 2.5;
+  const shoulderY = torsoTop + SHOULDER_Y - 0.35;
   ctx.fillStyle = shirtColor;
   roundRect(ctx, -bdw / 2, torsoTop, bdw, bdh, code === 'shirt-casual' ? 1.5 : 2.2);
   ctx.fill();
-  ctx.fillStyle = shade(shirtColor, -42);
-  ctx.fillRect(bdw / 2 - 2.8, torsoTop, 2.8, bdh);
+  ctx.fillStyle = shade(shirtColor, -38);
+  ctx.fillRect(bdw / 2 - 2.4, torsoTop + 1, 2.4, bdh - 1);
 
   if (code === 'shirt-blazer') {
-    ctx.fillStyle = shade(shirtColor, 28);
+    const lapel = shade(shirtColor, 18);
+    ctx.fillStyle = lapel;
     ctx.beginPath();
-    ctx.moveTo(-bdw / 2, shoulderY);
-    ctx.lineTo(-bdw / 2 - 1.2, shoulderY + 2.5);
-    ctx.lineTo(-bdw / 2, shoulderY + 4);
-    ctx.lineTo(bdw / 2, shoulderY + 4);
-    ctx.lineTo(bdw / 2 + 1.2, shoulderY + 2.5);
-    ctx.lineTo(bdw / 2, shoulderY);
+    ctx.moveTo(-2.4, torsoTop + 0.8);
+    ctx.lineTo(0, torsoTop + 4.2);
+    ctx.lineTo(2.4, torsoTop + 0.8);
+    ctx.lineTo(1.6, torsoTop + 1.4);
+    ctx.lineTo(0, torsoTop + 3.2);
+    ctx.lineTo(-1.6, torsoTop + 1.4);
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.22)';
-    ctx.fillRect(-1.8, torsoTop + 1.5, 3.6, 2.2);
-  } else if (code === 'shirt-polo') {
-    ctx.fillStyle = shade(shirtColor, 18);
-    ctx.beginPath();
-    ctx.arc(0, torsoTop + 2, 2.2, 0, Math.PI * 2);
+    ctx.fillStyle = shade(shirtColor, 12);
+    roundRect(ctx, -bdw / 2 - 0.15, shoulderY, 2.4, 2.8, 0.8);
     ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.12)';
-    ctx.fillRect(-1.2, torsoTop + 3.5, 2.4, 1.5);
+    roundRect(ctx, bdw / 2 - 2.25, shoulderY, 2.4, 2.8, 0.8);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+    ctx.beginPath();
+    ctx.moveTo(-0.9, torsoTop + 2.2);
+    ctx.lineTo(0, torsoTop + 3.4);
+    ctx.lineTo(0.9, torsoTop + 2.2);
+    ctx.lineTo(0.7, torsoTop + 2.5);
+    ctx.lineTo(0, torsoTop + 3);
+    ctx.lineTo(-0.7, torsoTop + 2.5);
+    ctx.closePath();
+    ctx.fill();
+  } else if (code === 'shirt-polo') {
+    ctx.fillStyle = shade(shirtColor, 14);
+    ctx.beginPath();
+    ctx.arc(0, torsoTop + 1.8, 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = shade(shirtColor, -28);
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(0, torsoTop + 3.6);
+    ctx.lineTo(0, torsoTop + 6.5);
+    ctx.stroke();
+    ctx.fillStyle = shade(shirtColor, 22);
+    ctx.fillRect(-1.1, torsoTop + 3.8, 2.2, 1.2);
+  } else if (code === 'shirt-casual') {
+    ctx.strokeStyle = shade(shirtColor, -22);
+    ctx.lineWidth = 0.55;
+    ctx.beginPath();
+    ctx.arc(0, torsoTop + 1.2, 3.2, 0.15, Math.PI - 0.15);
+    ctx.stroke();
   }
 }
 
@@ -451,11 +480,10 @@ export function drawAgentFigure(
     isSpeaker = false,
   } = anim;
 
-  const mouthOverride = talking ? 'mouth-talk' : watching ? 'mouth-watch' : null;
-  const lh = LH * scale;
-  const bdh = BDH * scale;
-  const bdw = BDW * scale;
-  const hr = HR * scale;
+  const mouthOverride = watching ? 'mouth-watch' : null;
+  const lh = LH;
+  const bdh = BDH;
+  const bdw = BDW;
   const fem = appearance.feminine;
 
   ctx.save();
@@ -477,25 +505,22 @@ export function drawAgentFigure(
     drawTrousersByCode(ctx, 'trouser-straight', bdw, bdh, lh, appearance.trouserColor, walk);
   }
 
-  limb(ctx, bdw / 2 - 0.3, torsoTop + 3, AW, AH, walk * 0.38 + (talking ? 0.15 : 0), shade(appearance.shirtColor, -35), 1.4);
-  limb(ctx, -bdw / 2 + 0.3, torsoTop + 3, AW, AH, -walk * 0.38 - (talking ? 0.12 : 0), appearance.shirtColor, 1.4);
-
   drawShirtByCode(ctx, appearance.shirt, bdw, bdh, torsoTop, appearance.shirtColor);
+
+  const armY = torsoTop + SHOULDER_Y;
+  const armInset = 0.3;
+  drawSleeve(ctx, bdw / 2 - armInset, armY, AW, AH, walk * 0.38 + (talking ? 0.15 : 0), shade(appearance.shirtColor, -28));
+  drawSleeve(ctx, -bdw / 2 + armInset, armY, AW, AH, -walk * 0.38 - (talking ? 0.12 : 0), shade(appearance.shirtColor, -18));
 
   ctx.fillStyle = appearance.skin;
   roundRect(ctx, -2, torsoTop - 3.8, 4, 4.2, 1.2);
   ctx.fill();
 
-  const hy = torsoTop - 3 - hr;
+  const hy = torsoTop - 3 - HR;
   drawAgentFace(ctx, 0, hy, appearance, mouthOverride);
 
   if (meeting >= 0) {
-    ctx.beginPath();
-    ctx.arc(0, hy + 2.8, 2, 0.12, Math.PI - 0.12);
-    ctx.strokeStyle = 'rgba(15,8,5,0.7)';
-    ctx.lineWidth = 0.85;
-    ctx.stroke();
-    for (let r = hr + 3; r <= hr + 9; r += 2.5) {
+    for (let r = HR + 3; r <= HR + 9; r += 2.5) {
       ctx.beginPath();
       ctx.arc(0, hy, r, 0, Math.PI * 2);
       ctx.strokeStyle = `rgba(255,210,50,${0.38 - r * 0.028})`;
@@ -507,14 +532,14 @@ export function drawAgentFigure(
   if (isSpeaker) {
     ctx.font = '10px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('🎤', 0, hy - hr - 6);
+    ctx.fillText('🎤', 0, hy - HR - 6);
   }
 
   ctx.restore();
 
   if (showName && label) {
-    const hyWorld = footY + bob + (torsoTop - 3 - hr) * scale;
-    const nameY = hyWorld - hr * scale - 7 - (isSpeaker ? 12 * scale : 0);
+    const hyWorld = footY + bob + (torsoTop - 3 - HR) * scale;
+    const nameY = hyWorld - HR * scale - 7 - (isSpeaker ? 12 * scale : 0);
     ctx.font = "7px 'Courier New',monospace";
     ctx.textAlign = 'center';
     const nw = ctx.measureText(label).width + 8;
@@ -528,24 +553,29 @@ export function drawAgentFigure(
   }
 }
 
-/** Preview on a 2D canvas (customization panel). */
-export function drawAppearancePreview(canvas, appearance, frame = 0) {
-  const ctx = canvas.getContext('2d');
-  const w = canvas.width;
-  const h = canvas.height;
-  ctx.clearRect(0, 0, w, h);
-  ctx.fillStyle = '#0E0E18';
-  ctx.fillRect(0, 0, w, h);
+/** Logical-pixel preview (panel uses ctx + setTransform for DPR). */
+export function drawAppearancePreview(
+  ctx,
+  width,
+  height,
+  appearance,
+  frame = 0,
+  scale = 2.35,
+  bgColor = '#0E0E18',
+) {
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = bgColor;
+  ctx.fillRect(0, 0, width, height);
   drawAgentFigure(
     ctx,
-    w / 2,
-    h - 14,
+    width / 2,
+    height - 18,
     appearance,
-    { walk: Math.sin(frame * 0.12) * 0.4, bob: 0, faceDir: 1 },
+    { walk: Math.sin(frame * 0.1) * 0.2, bob: 0, faceDir: 1 },
     false,
     '',
     '',
-    2.2,
+    scale,
   );
 }
 
