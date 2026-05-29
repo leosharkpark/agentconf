@@ -1,4 +1,10 @@
 import { useState, useEffect, useRef } from "react";
+import CustomizationPanel from "./CustomizationPanel.jsx";
+import {
+  resolveAppearance,
+  drawAgentFigure,
+  agentBodyHeight,
+} from "./agentCustomization.js";
 
 const TW=44, TH=22, BH=7, SBH=24;
 const NET_COLS=3, NET_ROWS=3, NET_CELL_W=14, NET_CELL_H=11;
@@ -8,6 +14,13 @@ const STAGE_Y1=2, STAGE_Y2=5;
 const STAGE_PLATFORM_X1=STAGE_X1+4, STAGE_PLATFORM_X2=STAGE_X2-4;
 const STAGE_CX=(STAGE_X1+STAGE_X2)/2;
 const STAGE_ROW=STAGE_Y1+0.5;
+const PODCAST_X1=STAGE_X2-10, PODCAST_X2=STAGE_X2+1;
+const PODCAST_Y1=6, PODCAST_Y2=13;
+const PODCAST_CX=(PODCAST_X1+PODCAST_X2)/2-0.5;
+const PODCAST_CY=PODCAST_Y1+3.6;
+const PODCAST_PLATFORM_X1=PODCAST_X1+2, PODCAST_PLATFORM_X2=PODCAST_X2-3;
+const PODCAST_PLATFORM_Y1=PODCAST_Y1+1, PODCAST_PLATFORM_Y2=PODCAST_Y2-2;
+const PODCAST_PBH=16;
 const SPONSOR_Y0=NET_Y0+NET_ROWS*NET_CELL_H+1;
 const SPONSOR_X2=NET_X0+Math.floor(NET_COLS*NET_CELL_W*0.55);
 const GW=STAGE_X2+3, GH=SPONSOR_Y0+9;
@@ -88,6 +101,7 @@ const FOCUS = {
   stage: () => ({ gx: STAGE_CX, gy: STAGE_Y2 + 0.6, zoom: 1.45 }),
   stageScreen: () => ({ gx: STAGE_CX, gy: STAGE_Y1 + 0.5, zoom: 1.65 }),
   floor: () => ({ gx: STAGE_CX, gy: NET_Y0 + (NET_ROWS * NET_CELL_H) / 2, zoom: 1.35 }),
+  podcast: () => ({ gx: PODCAST_CX, gy: PODCAST_CY, zoom: 2.35 }),
   booth: b => ({ gx: b.gx + 0.5, gy: b.gy + 0.5, zoom: 2.65 }),
   door: () => ({ gx: MAIN_DOOR_GX, gy: MAIN_DOOR_GY, zoom: 1.85 }),
 };
@@ -128,6 +142,20 @@ const FLOOR_ROOM = {
   lc: '#60C0FF',
 };
 
+const PODCAST_ROOM = {
+  id: 'podcast',
+  name: 'Podcast Studio',
+  icon: '🎙️',
+  x1: PODCAST_X1,
+  y1: PODCAST_Y1,
+  x2: PODCAST_X2,
+  y2: PODCAST_Y2,
+  top: '#2E2018',
+  sL: '#1A100C',
+  sR: '#241810',
+  lc: '#FF7A58',
+};
+
 const ROOMS = [
   {
     id: 'stage',
@@ -144,6 +172,8 @@ const ROOMS = [
   },
   FLOOR_ROOM,
 ];
+
+const ROOM_LABELS = [PODCAST_ROOM, ...ROOMS];
 
 const boothRoomId = (gx, gy) => roomAt(gx, gy)?.id || 'floor';
 const isFloorTile = (gx, gy) => (
@@ -261,8 +291,17 @@ const loadBoothLayout = () => {
   } catch { return null; }
 };
 
+const isPodcastBounds = (gx, gy) => (
+  gx >= PODCAST_X1 && gx < PODCAST_X2 && gy >= PODCAST_Y1 && gy < PODCAST_Y2
+);
+const isPodcastPlatform = (gx, gy) => (
+  gx >= PODCAST_PLATFORM_X1 && gx <= PODCAST_PLATFORM_X2
+  && gy >= PODCAST_PLATFORM_Y1 && gy <= PODCAST_PLATFORM_Y2
+);
+
 const roomAt = (x,y) => {
   const ix=Math.floor(x), iy=Math.floor(y);
+  if (isPodcastBounds(ix, iy)) return PODCAST_ROOM;
   return ROOMS.find(r=>ix>=r.x1&&ix<r.x2&&iy>=r.y1&&iy<r.y2)??null;
 };
 const isStageRoom = (gx, gy) => roomAt(gx, gy)?.id === 'stage';
@@ -270,7 +309,9 @@ const isStageTile = (gx, gy) => (
   gx >= STAGE_PLATFORM_X1 && gx <= STAGE_PLATFORM_X2
   && gy >= STAGE_Y1 && gy <= STAGE_Y2
 );
-const isStageAudience = (gx, gy) => isStageRoom(gx, gy) && !isStageTile(gx, gy);
+const isStageAudience = (gx, gy) => (
+  isStageRoom(gx, gy) && !isStageTile(gx, gy) && !isPodcastBounds(gx, gy)
+);
 
 const randInStageAudience = () => {
   let x;
@@ -278,7 +319,10 @@ const randInStageAudience = () => {
   do {
     x = STAGE_X1 + 1.2 + Math.random() * (STAGE_X2 - STAGE_X1 - 2.4);
     y = STAGE_Y2 + 1.2 + Math.random() * (NET_Y0 - STAGE_Y2 - 2.2);
-  } while (isStageTile(Math.floor(x), Math.floor(y)));
+  } while (
+    isStageTile(Math.floor(x), Math.floor(y))
+    || isPodcastBounds(Math.floor(x), Math.floor(y))
+  );
   return { x, y };
 };
 
@@ -362,7 +406,7 @@ const SPAWNABLE_AGENTS = [
 const SPEAKER_DEF = {
   name:'Dr. Sarah K.', title:'Keynote Speaker · Future of Work',
   bio:'Research lead on AI-mediated professional networks. Today: how agent-to-agent conferences reshape B2B discovery for solo operators.',
-  linkedin:'https://www.linkedin.com/in/sarah-kask', color:'#FFE060', skin:'#F0D4B0', hair:'#2A1410', pants:'#2A2840', feminine:true,
+  linkedin:'https://www.linkedin.com/in/sarah-kask', color:'#FFE060', skin:'#F0D4B0', hair:'#2A1410', pants:'#2A2840', feminine:true, hairStyle:2,
 };
 const BOOTH_DEFS  = [
   {name:'Marco B.', title:'Solutions Engineer · NordStack', bio:'Cloud infra for Baltic startups — EU residency, predictable pricing. Ask me about migration off legacy VPS.', linkedin:'https://www.linkedin.com/in/marco-bert', color:'#60C0FF', skin:'#F4C0A0', hair:'#100A04', pants:'#0A1828'},
@@ -373,6 +417,32 @@ const BOOTH_DEFS  = [
   {name:'Piret L.', title:'Developer Advocate · Bitshift', bio:'Open-source observability for small teams. I help founders instrument their first production app without a platform team.', linkedin:'https://www.linkedin.com/in/piret-luik', color:'#F09050', skin:'#E8B880', hair:'#1A1038', pants:'#281018', feminine:true},
   {name:'Jaan K.', title:'Partnerships · Bringin', bio:'Cross-border invoicing and contractor payments in EUR. If you hire Estonian freelancers abroad, I can cut fee drag.', linkedin:'https://www.linkedin.com/in/jaan-kivi', color:'#FFB840', skin:'#F4C8A8', hair:'#080808', pants:'#181208'},
   {name:'Linda Ling', title:'Founder · Knitling', bio:'Knitwear to reconnect to your beautiful self. I build Knitling around premium cozy knit pieces — here to explore wholesale, retail partnerships, and creative collaborations.', linkedin:'https://www.linkedin.com/in/linda-ling', website:'https://knitling.com', color:'#E8E4DC', skin:'#EDDCC8', hair:'#C8B888', pants:'#E0D8D0', feminine:true},
+];
+
+const PODCAST_ID_BASE = 110;
+const PODCAST_DEFS = [
+  {
+    name:'Markus V.', title:'Host · Agent Mic',
+    bio:'Weekly show on agent-native work, founder stories, and tools that actually ship. Recording live from AgentConf.',
+    linkedin:'https://www.linkedin.com/in/markus-vool', color:'#FF6B4A', skin:'#F0D0B0', hair:'#1A1010', pants:'#281818',
+    shirtCode:'shirt-blazer', hairCode:'hair-m-part',
+  },
+  {
+    name:'Ines L.', title:'Co-host · Agent Mic', feminine:true,
+    bio:'Interviews operators and builders on the Baltics tech scene. Agent Mic — honest conversations, no hype.',
+    linkedin:'https://www.linkedin.com/in/ines-luik', color:'#38E8C0', skin:'#F4C8A8', hair:'#3A2018', pants:'#1A2830',
+    shirtCode:'shirt-casual', hairCode:'hair-f-bob',
+  },
+];
+const PODCAST_HOST_POSITIONS = [
+  { x: PODCAST_CX - 1.35, y: PODCAST_CY + 0.55, faceDir: 1 },
+  { x: PODCAST_CX + 1.35, y: PODCAST_CY + 0.55, faceDir: -1 },
+];
+const PODCAST_CHAT_LINES = [
+  'So tell us how you found AgentConf…',
+  'What surprised you this week?',
+  'Let\'s unpack that workflow.',
+  '◈ Recording now',
 ];
 
 const randInRoom = r => ({
@@ -456,7 +526,7 @@ const mkAgent = (id,def,x,y,opts={}) => ({
   roomId: ROOMS[id%ROOMS.length]?.id||'stage',
   waitTimer:Math.floor(Math.random()*150),
   meeting:-1, talkTimer:0, talkMsg:'', talkCooldown:0,
-  watchTimer:0, watchMsg:'', goal:'roam',
+  watchTimer:0, watchMsg:'', goal:'roam', faceDir:1,
   _type:'agent', ...opts
 });
 
@@ -474,7 +544,25 @@ const initAll = (booths) => {
       isStatic:true, roomId:boothRoomId(b.gx, b.gy),
     });
   });
-  return { regular, speaker, booth, nextId: AGENTS_DEF.length };
+  const podcast = PODCAST_DEFS.map((d, i) => {
+    const pos = PODCAST_HOST_POSITIONS[i];
+    return mkAgent(PODCAST_ID_BASE + i, d, pos.x, pos.y, {
+      isStatic: true,
+      roomId: 'podcast',
+      faceDir: pos.faceDir,
+    });
+  });
+  if (podcast.length >= 2) {
+    const msg = PODCAST_CHAT_LINES[Math.floor(Math.random() * PODCAST_CHAT_LINES.length)];
+    const dur = Math.min(TALK_MAX_FRAMES, 8 * FPS_ASSUME);
+    podcast[0].meeting = podcast[1].id;
+    podcast[1].meeting = podcast[0].id;
+    podcast[0].talkTimer = dur;
+    podcast[1].talkTimer = dur;
+    podcast[0].talkMsg = msg;
+    podcast[1].talkMsg = msg;
+  }
+  return { regular, speaker, booth, podcast, nextId: AGENTS_DEF.length };
 };
 
 // ─── Drawing helpers ──────────────────────────────────────────────────────────
@@ -521,6 +609,135 @@ function drawStageAudienceFloor(ctx, gx, gy) {
   const { x, y } = iso(gx, gy);
   ctx.strokeStyle = 'rgba(168,144,255,0.06)';
   ctx.strokeRect(x - TW / 2 + 8, y + TH / 2 - 4, TW - 16, 4);
+}
+
+function drawPodcastFloor(ctx, gx, gy) {
+  drawBlock(ctx, gx, gy, '#241810', '#140C08', '#1C140C', BH);
+  const { x, y } = iso(gx, gy);
+  ctx.strokeStyle = 'rgba(255,122,88,0.08)';
+  ctx.strokeRect(x - TW / 2 + 6, y + TH / 2 - 3, TW - 12, 3);
+}
+
+function drawPodcastPlatform(ctx, gx, gy) {
+  const front = gy === PODCAST_PLATFORM_Y2;
+  const top = front ? '#5A4030' : '#4A3428';
+  const sL = front ? '#2A1C14' : '#221810';
+  const sR = front ? '#3E2C20' : '#302018';
+  drawBlock(ctx, gx, gy, top, sL, sR, PODCAST_PBH);
+  const { x, y } = iso(gx, gy);
+  const lip = y + TH / 2 + PODCAST_PBH;
+  if (front) {
+    ctx.fillStyle = '#E85A40';
+    ctx.fillRect(x - TW / 2 + 4, lip - 3, TW - 8, 2);
+  }
+}
+
+function drawPodcastTable(ctx) {
+  const { x, y } = iso(PODCAST_CX, PODCAST_CY + 0.12);
+  const fy = y + TH / 2 + PODCAST_PBH;
+  ctx.fillStyle = '#1A1008';
+  ctx.fillRect(x - 3, fy - 2, 6, 10);
+  ctx.fillRect(x + 14, fy - 2, 6, 10);
+  ctx.fillRect(x - 18, fy - 2, 6, 10);
+  const g = ctx.createRadialGradient(x, fy - 10, 2, x, fy - 10, 24);
+  g.addColorStop(0, '#6A4A38');
+  g.addColorStop(1, '#3A2818');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.ellipse(x, fy - 10, 26, 11, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,200,160,0.25)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.beginPath();
+  ctx.ellipse(x, fy - 9, 18, 7, 0, 0, Math.PI * 2);
+  ctx.fill();
+  [-10, 0, 10].forEach(off => {
+    ctx.fillStyle = '#2A1810';
+    ctx.beginPath();
+    ctx.arc(x + off, fy - 8, 2.2, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+function drawPodcastScreen(ctx, frame, detail = 1) {
+  const { x, y } = iso(PODCAST_CX, PODCAST_Y1 + 1.1);
+  const fy = y + TH / 2 - PODCAST_PBH - 4;
+  const SW = 96 * detail;
+  const SH = 58 * detail;
+
+  ctx.fillStyle = '#0A0806';
+  ctx.fillRect(x - SW / 2 - 4, fy - SH - 5, SW + 8, SH + 7);
+  ctx.fillStyle = '#120E0C';
+  ctx.fillRect(x - SW / 2, fy - SH, SW, SH);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x - SW / 2 + 2, fy - SH + 2, SW - 4, SH - 4);
+  ctx.clip();
+  const bg = ctx.createLinearGradient(x, fy - SH, x, fy);
+  bg.addColorStop(0, '#1A2838');
+  bg.addColorStop(1, '#0C1018');
+  ctx.fillStyle = bg;
+  ctx.fillRect(x - SW / 2, fy - SH, SW, SH);
+
+  const fs = n => `${Math.round(n * detail)}px Courier New`;
+  const pulse = 0.5 + 0.5 * Math.sin(frame * 0.06);
+
+  ctx.fillStyle = `rgba(56,232,192,${0.15 + pulse * 0.1})`;
+  ctx.fillRect(x - SW / 2 + 4, fy - SH + 4, SW - 8, SH - 8);
+
+  const micY = fy - SH * 0.52;
+  ctx.fillStyle = '#FF6B4A';
+  ctx.beginPath();
+  ctx.arc(x, micY, 11 * detail, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#1A1010';
+  ctx.fillRect(x - 4 * detail, micY + 8 * detail, 8 * detail, 10 * detail);
+  ctx.fillStyle = '#E8E0D8';
+  ctx.beginPath();
+  ctx.arc(x, micY - 2 * detail, 5 * detail, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#FF8A68';
+  ctx.font = `bold ${fs(11)}`;
+  ctx.textAlign = 'center';
+  ctx.fillText('AGENT', x, fy - SH + 38 * detail);
+  ctx.fillStyle = '#38E8C0';
+  ctx.fillText('MIC', x, fy - SH + 50 * detail);
+
+  ctx.fillStyle = 'rgba(255,255,255,0.45)';
+  ctx.font = fs(5);
+  ctx.fillText('LIVE FROM AGENTCONF', x, fy - 10 * detail);
+
+  const waveY = fy - SH + 22 * detail;
+  for (let i = 0; i < 7; i++) {
+    const h = (4 + Math.sin(frame * 0.12 + i * 0.9) * 3) * detail;
+    ctx.fillStyle = i % 2 === 0 ? 'rgba(255,107,74,0.7)' : 'rgba(56,232,192,0.65)';
+    ctx.fillRect(x - 28 * detail + i * 8 * detail, waveY - h, 4 * detail, h);
+  }
+
+  ctx.restore();
+
+  ctx.shadowBlur = 14;
+  ctx.shadowColor = 'rgba(255,107,74,0.45)';
+  ctx.strokeStyle = 'rgba(255,122,88,0.8)';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(x - SW / 2, fy - SH, SW, SH);
+  ctx.shadowBlur = 0;
+}
+
+function drawPodcastSet(ctx, frame, detail) {
+  drawPodcastScreen(ctx, frame, detail);
+  drawPodcastTable(ctx);
+  const sign = iso(PODCAST_CX, PODCAST_Y2 - 0.35);
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(sign.x - 38, sign.y + TH / 2 - 18, 76, 11);
+  ctx.fillStyle = 'rgba(255,122,88,0.9)';
+  ctx.font = "bold 7px 'Courier New',monospace";
+  ctx.textAlign = 'center';
+  ctx.fillText('ON AIR', sign.x, sign.y + TH / 2 - 10);
 }
 
 function drawProscenium(ctx) {
@@ -960,29 +1177,45 @@ function drawBoothDragGlow(ctx, gx, gy) {
 }
 
 // ─── Character drawing ────────────────────────────────────────────────────────
-const LH=10,LW=3.5,BDH=11,BDW=9,AH=9,AW=3,HR=5.5;
+const agentScale = a => 0.94 + ((a.id * 17) % 13) * 0.012;
+const agentBodyH = a => Math.round(agentBodyHeight(agentScale(a)));
 
 function feetPos(a) {
   const { x, y } = iso(a.x, a.y);
-  const onPlatform = isStageTile(Math.floor(a.x), Math.floor(a.y));
-  return { x, y: y + TH / 2 - (onPlatform ? SBH : 0) };
+  const gx = Math.floor(a.x);
+  const gy = Math.floor(a.y);
+  const onMainStage = isStageTile(gx, gy);
+  const onPodcast = isPodcastPlatform(gx, gy);
+  const lift = onMainStage ? SBH : onPodcast ? PODCAST_PBH : 0;
+  return { x, y: y + TH / 2 - lift };
 }
 
-function limb(ctx,hx,hy,w,h,angle,color) {
-  ctx.save(); ctx.translate(hx,hy); ctx.rotate(angle);
-  ctx.fillStyle=color; ctx.beginPath(); ctx.rect(-w/2,0,w,h); ctx.fill();
-  ctx.restore();
-}
+const updateAgentFacing = (a, others) => {
+  const dx = a.tx - a.x;
+  const dy = a.ty - a.y;
+  if (dx * dx + dy * dy > 0.004) {
+    a.faceDir = dx >= 0 ? 1 : -1;
+    return;
+  }
+  if (a.meeting >= 0) {
+    const p = others.find(o => o.id === a.meeting);
+    if (p) a.faceDir = p.x >= a.x ? 1 : -1;
+  }
+};
 
 function getDef(a) {
-  if (a.id===99) return SPEAKER_DEF;
-  if (a.id>=100) return BOOTH_DEFS[a.id-100]||BOOTH_DEFS[0];
+  if (a.id === 99) return SPEAKER_DEF;
+  if (a.id >= PODCAST_ID_BASE && a.id < PODCAST_ID_BASE + PODCAST_DEFS.length) {
+    return PODCAST_DEFS[a.id - PODCAST_ID_BASE];
+  }
+  if (a.id >= 100) return BOOTH_DEFS[a.id - 100] || BOOTH_DEFS[0];
   if (a.id >= AGENTS_DEF.length && a.name) return a;
   return AGENTS_DEF[a.id]||AGENTS_DEF[0];
 }
 
 const profileFromAgent = a => {
   const d = getDef(a);
+  const app = resolveAppearance(d, a.id);
   return {
     id: a.id,
     name: d.name,
@@ -991,6 +1224,12 @@ const profileFromAgent = a => {
     linkedin: d.linkedin || '',
     website: d.website || '',
     color: a.color,
+    appearance: app,
+    hairCode: app.hair,
+    eyesCode: app.eyes,
+    mouthCode: app.mouth,
+    shirtCode: app.shirt,
+    trousersCode: app.trousers,
   };
 };
 
@@ -998,56 +1237,15 @@ const hitTestAgent = (wx, wy, agents) => {
   const sorted = [...agents].sort((a, b) => (b.x + b.y) - (a.x + a.y));
   for (const a of sorted) {
     const p = feetPos(a);
-    const top = p.y - (LH + BDH + HR + 14);
+    const top = p.y - agentBodyH(a);
     if (wx >= p.x - 14 && wx <= p.x + 14 && wy >= top && wy <= p.y + 6) return a;
   }
   return null;
 };
 
-function drawAgentFace(ctx, x, hy, def) {
-  const hr = HR;
-  const fem = !!def.feminine;
-
-  if (fem) {
-    ctx.fillStyle = def.hair;
-    ctx.fillRect(x - hr - 0.5, hy + 0.5, 2, hr + 2);
-    ctx.fillRect(x + hr - 1.5, hy + 0.5, 2, hr + 2);
-  }
-
-  ctx.beginPath();
-  ctx.arc(x, hy, hr, 0, Math.PI * 2);
-  ctx.fillStyle = def.skin;
-  ctx.fill();
-
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(x, hy, hr, 0, Math.PI * 2);
-  ctx.clip();
-  const cheek = ctx.createRadialGradient(x + hr * 0.3, hy, 0, x + hr * 0.3, hy, hr * 0.85);
-  cheek.addColorStop(0, 'rgba(0,0,0,0.14)');
-  cheek.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = cheek;
-  ctx.fillRect(x, hy - hr, hr, hr * 2);
-
-  ctx.beginPath();
-  ctx.arc(x, hy - (fem ? 0.8 : 0), hr + (fem ? 0.6 : 0), Math.PI * 1.08, Math.PI * 1.92);
-  ctx.lineTo(x, hy - 1);
-  ctx.closePath();
-  ctx.fillStyle = def.hair;
-  ctx.fill();
-  ctx.restore();
-
-  ctx.fillStyle = 'rgba(15,8,5,0.9)';
-  ctx.beginPath(); ctx.arc(x - 2, hy + 0.5, 1.1, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(x + 2, hy + 0.5, 1.1, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,0.65)';
-  ctx.beginPath(); ctx.arc(x - 1.5, hy, 0.45, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(x + 2.5, hy, 0.45, 0, Math.PI * 2); ctx.fill();
-}
-
 function drawWatchDialog(ctx, a, frame) {
   const p = feetPos(a);
-  const top = p.y - LH - BDH - 3 - HR;
+  const top = p.y - agentBodyH(a);
   const y = top - 18;
   const dots = '.'.repeat((Math.floor(frame / 14) % 3) + 1);
   const status = 'WATCHING';
@@ -1080,7 +1278,7 @@ function drawTalkDialog(ctx, a, b, frame) {
   const pa = feetPos(a);
   const pb = feetPos(b);
   const mx = (pa.x + pb.x) / 2;
-  const top = Math.min(pa.y, pb.y) - LH - BDH - 3 - HR;
+  const top = Math.min(pa.y, pb.y) - agentBodyH(a);
   const y = top - 20;
   const dots = '.'.repeat((Math.floor(frame / 14) % 3) + 1);
   const status = 'TALKING';
@@ -1134,92 +1332,40 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-function drawCharacter(ctx, a, frame, showName = true) {
-  const def=getDef(a);
-  const fem=!!def.feminine;
-  const {x,y}=feetPos(a);
-  const talking=a.talkTimer>0;
-  const watching=a.watchTimer>0;
-  const moving=!a.isStatic&&!talking&&!watching&&(a.x-a.tx)**2+(a.y-a.ty)**2>0.01;
-  const wp=moving?Math.sin(frame*0.12)*0.75:0;
-
-  ctx.beginPath(); ctx.ellipse(x,y+1,8,2.8,0,0,Math.PI*2);
-  ctx.fillStyle='rgba(0,0,0,0.28)'; ctx.fill();
-
-  if (!fem) limb(ctx,x+2,y-LH,LW,LH,-wp*0.45,shade(def.pants,-30));
-  limb(ctx,x+BDW/2-0.5,y-LH-BDH+2,AW,AH,wp*0.42,shade(a.color,-40));
-
-  ctx.fillStyle=a.color;
-  ctx.beginPath(); ctx.rect(x-BDW/2,y-LH-BDH,BDW,BDH); ctx.fill();
-  ctx.fillStyle=shade(a.color,-45);
-  ctx.beginPath(); ctx.rect(x+BDW/2-2.5,y-LH-BDH,2.5,BDH); ctx.fill();
-
-  if (!fem) limb(ctx,x-2,y-LH,LW,LH,wp*0.45,def.pants);
-  limb(ctx,x-BDW/2+0.5,y-LH-BDH+2,AW,AH,-wp*0.42,a.color);
-
-  if (fem) {
-    const waist = y - LH + 1;
-    ctx.fillStyle = def.pants;
-    ctx.beginPath();
-    ctx.moveTo(x - BDW / 2 + 0.5, waist);
-    ctx.lineTo(x + BDW / 2 - 0.5, waist);
-    ctx.lineTo(x + 4.5, y);
-    ctx.lineTo(x - 4.5, y);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = shade(def.pants, -22);
-    ctx.beginPath();
-    ctx.moveTo(x + 0.5, waist);
-    ctx.lineTo(x + 4.5, y);
-    ctx.lineTo(x + 4.5, y - 0.5);
-    ctx.lineTo(x + 0.5, waist + BDH - 2);
-    ctx.closePath();
-    ctx.fill();
-  } else {
-    ctx.fillStyle='#0A0A18';
-    ctx.beginPath(); ctx.rect(x-4,y-2,3.5,2.5); ctx.fill();
-    ctx.beginPath(); ctx.rect(x+0.5,y-2,3.5,2.5); ctx.fill();
-  }
-
-  ctx.fillStyle=def.skin;
-  ctx.beginPath(); ctx.rect(x-1.8,y-LH-BDH-3,3.6,3.5); ctx.fill();
-
-  const hy=y-LH-BDH-3-HR;
-  drawAgentFace(ctx,x,hy,def);
-
-  if (a.meeting>=0) {
-    ctx.beginPath(); ctx.arc(x,hy+2.5,2.2,0.15,Math.PI-0.15);
-    ctx.strokeStyle='rgba(15,8,5,0.75)'; ctx.lineWidth=0.9; ctx.stroke();
-    for (let r=HR+3;r<=HR+8;r+=2.5) {
-      ctx.beginPath(); ctx.arc(x,hy,r,0,Math.PI*2);
-      ctx.strokeStyle=`rgba(255,210,50,${0.35-r*0.025})`; ctx.lineWidth=1; ctx.stroke();
-    }
-  }
-
-  if (a.id===99) {
-    ctx.font='10px sans-serif'; ctx.textAlign='center';
-    ctx.fillText('🎤',x,hy-HR-6);
-  }
-
-  if (showName) {
-    const extraUp = a.id === 99 ? 12 : 0;
-    const nameY = hy - HR - 7 - extraUp;
-    ctx.font = "7px 'Courier New',monospace";
-    ctx.textAlign = 'center';
-    const nw = ctx.measureText(a.name).width + 8;
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillRect(x - nw / 2, nameY - 8, nw, 10);
-    ctx.strokeStyle = a.color + '55';
-    ctx.lineWidth = 0.5;
-    ctx.strokeRect(x - nw / 2, nameY - 8, nw, 10);
-    ctx.fillStyle = a.color;
-    ctx.fillText(a.name, x, nameY - 1);
-  }
+function drawCharacter(ctx, a, frame, showName = true, movementPaused = false) {
+  const def = getDef(a);
+  const appearance = resolveAppearance(def, a.id);
+  const { x, y } = feetPos(a);
+  const sc = agentScale(a);
+  const talking = a.talkTimer > 0;
+  const watching = a.watchTimer > 0;
+  const moving = !movementPaused && !a.isStatic && !talking && !watching
+    && (a.x - a.tx) ** 2 + (a.y - a.ty) ** 2 > 0.01;
+  drawAgentFigure(
+    ctx,
+    x,
+    y,
+    appearance,
+    {
+      talking,
+      watching,
+      moving,
+      walk: moving ? Math.sin(frame * 0.14) : 0,
+      bob: moving ? Math.sin(frame * 0.28) * 0.9 : (talking ? Math.sin(frame * 0.08) * 0.25 : 0),
+      faceDir: a.faceDir ?? 1,
+      meeting: a.meeting,
+      isSpeaker: a.id === 99,
+    },
+    showName,
+    a.name,
+    a.color,
+    sc,
+  );
 }
 
 function drawConnection(ctx,a,b) {
   const pa=feetPos(a),pb=feetPos(b);
-  const ha=pa.y-LH-BDH-3-HR, hb=pb.y-LH-BDH-3-HR;
+  const ha=pa.y-agentBodyH(a), hb=pb.y-agentBodyH(b);
   const g=ctx.createLinearGradient(pa.x,ha,pb.x,hb);
   g.addColorStop(0,a.color+'99'); g.addColorStop(1,b.color+'99');
   ctx.beginPath(); ctx.moveTo(pa.x,ha); ctx.lineTo(pb.x,hb);
@@ -1253,11 +1399,14 @@ export default function AgentConf() {
   const [boothDragEnabled, setBoothDragEnabled] = useState(loadBoothDragPref);
   const showAgentNamesRef = useRef(loadAgentNamesPref());
   const [showAgentNames, setShowAgentNames] = useState(loadAgentNamesPref);
+  const movementPausedRef = useRef(false);
+  const [movementPaused, setMovementPaused] = useState(false);
   const [stats,setStats] = useState({total:AGENTS_DEF.length,matches:0,convos:0,hot:'—'});
   const [roamingCount, setRoamingCount] = useState(AGENTS_DEF.length);
   const [zoomPct,setZoomPct] = useState(100);
   const [focusId,setFocusId] = useState('overview');
   const [selectedProfile,setSelectedProfile] = useState(null);
+  const [showCustomization,setShowCustomization] = useState(false);
 
   useEffect(() => {
     boothDragEnabledRef.current = boothDragEnabled;
@@ -1266,6 +1415,12 @@ export default function AgentConf() {
   useEffect(() => {
     showAgentNamesRef.current = showAgentNames;
   }, [showAgentNames]);
+
+  useEffect(() => {
+    movementPausedRef.current = movementPaused;
+  }, [movementPaused]);
+
+  const toggleMovementPaused = () => setMovementPaused(prev => !prev);
 
   const toggleBoothDrag = () => {
     setBoothDragEnabled(prev => {
@@ -1295,6 +1450,7 @@ export default function AgentConf() {
       : id === 'stage' ? FOCUS.stage()
       : id === 'floor' ? FOCUS.floor()
       : id === 'door' ? FOCUS.door()
+      : id === 'podcast' ? FOCUS.podcast()
       : FOCUS.overview();
     focusWorldPoint(cam, f.gx, f.gy, f.zoom);
   };
@@ -1350,8 +1506,13 @@ export default function AgentConf() {
     const onResize = () => resizeView(canvas, view);
     window.addEventListener('resize', onResize);
 
-    const {regular,speaker,booth}=agentsRef.current;
-    const getAllAgents = () => [...agentsRef.current.regular, agentsRef.current.speaker, ...agentsRef.current.booth];
+    const { regular, speaker, booth, podcast } = agentsRef.current;
+    const getAllAgents = () => [
+      ...agentsRef.current.regular,
+      agentsRef.current.speaker,
+      ...agentsRef.current.booth,
+      ...(agentsRef.current.podcast ?? []),
+    ];
 
     function nextTarget(a) {
       if (a.isStatic) return { x: a.tx, y: a.ty };
@@ -1380,6 +1541,14 @@ export default function AgentConf() {
     };
 
     function update() {
+      const facePool = [...regular, speaker, ...booth];
+      regular.forEach(a => updateAgentFacing(a, facePool));
+      booth.forEach(a => updateAgentFacing(a, facePool));
+      (podcast ?? []).forEach(a => updateAgentFacing(a, facePool));
+      updateAgentFacing(speaker, facePool);
+
+      if (movementPausedRef.current) return;
+
       regular.forEach(a => {
         if (a.talkTimer > 0) {
           a.talkTimer--;
@@ -1453,6 +1622,34 @@ export default function AgentConf() {
         if (a.talkCooldown > 0 && a.talkTimer === 0) a.talkCooldown--;
       });
 
+      const restartPodcastChat = () => {
+        if (!podcast || podcast.length < 2) return;
+        const [a, b] = podcast;
+        const msg = PODCAST_CHAT_LINES[Math.floor(Math.random() * PODCAST_CHAT_LINES.length)];
+        const dur = Math.min(TALK_MAX_FRAMES, 6 * FPS_ASSUME);
+        a.meeting = b.id;
+        b.meeting = a.id;
+        a.talkTimer = dur;
+        b.talkTimer = dur;
+        a.talkMsg = msg;
+        b.talkMsg = msg;
+      };
+      (podcast ?? []).forEach(a => {
+        if (a.talkTimer > 0) a.talkTimer--;
+      });
+      if (
+        podcast?.length >= 2
+        && podcast[0].talkTimer === 0
+        && podcast[1].talkTimer === 0
+        && podcast[0].meeting >= 0
+      ) {
+        podcast[0].meeting = -1;
+        podcast[1].meeting = -1;
+        podcast[0].talkMsg = '';
+        podcast[1].talkMsg = '';
+        restartPodcastChat();
+      }
+
       for (let i = 0; i < regular.length; i++) {
         for (let j = i + 1; j < regular.length; j++) {
           const a = regular[i];
@@ -1492,7 +1689,9 @@ export default function AgentConf() {
         for (let gx=Math.max(0,s-GH+1);gx<=Math.min(GW-1,s);gx++) {
           const gy=s-gx; if(gy<0||gy>=GH)continue;
           const r=roomAt(gx,gy);
-          if (r) {
+          if (isPodcastPlatform(gx, gy)) drawPodcastPlatform(ctx, gx, gy);
+          else if (isPodcastBounds(gx, gy)) drawPodcastFloor(ctx, gx, gy);
+          else if (r) {
             if (isStageTile(gx, gy)) drawStageBlock(ctx, gx, gy);
             else if (isStageAudience(gx, gy)) drawStageAudienceFloor(ctx, gx, gy);
             else drawBlock(ctx, gx, gy, r.top, r.sL, r.sR);
@@ -1500,12 +1699,15 @@ export default function AgentConf() {
         }
 
       drawStageSet(ctx, frame, detail);
+      drawPodcastSet(ctx, frame, detail);
       drawMainDoor(ctx);
 
       // Room labels
-      ROOMS.forEach(r=>{
+      ROOM_LABELS.forEach(r=>{
         const cx = (r.x1 + r.x2) / 2;
-        const cy = r.id === 'stage' ? (STAGE_Y2 + NET_Y0) / 2 : (r.y1 + r.y2) / 2;
+        const cy = r.id === 'stage' ? (STAGE_Y2 + NET_Y0) / 2
+          : r.id === 'podcast' ? PODCAST_CY
+          : (r.y1 + r.y2) / 2;
         const p = iso(cx, cy);
         ctx.font="bold 8px 'Courier New',monospace"; ctx.textAlign='center';
         const label=`${r.icon} ${r.name.toUpperCase()}`;
@@ -1547,7 +1749,7 @@ export default function AgentConf() {
             drawKnitlingBooth(ctx, item.gx, item.gy, item, knitlingImgRef.current, detail);
           else drawBooth(ctx, item.gx, item.gy, item.label, item.color, item.accent, detail);
         } else if (item._type === 'agent') {
-          drawCharacter(ctx, item, frame, showAgentNamesRef.current);
+          drawCharacter(ctx, item, frame, showAgentNamesRef.current, movementPausedRef.current);
         }
       });
 
@@ -1710,8 +1912,10 @@ export default function AgentConf() {
             focusWorldPoint(cam, f.gx, f.gy, f.zoom);
           }
         } else {
-          const { regular, speaker, booth } = agentsRef.current;
-          const hit = hitTestAgent(w.x, w.y, [...regular, speaker, ...booth]);
+          const { regular, speaker, booth, podcast: podAgents } = agentsRef.current;
+          const hit = hitTestAgent(w.x, w.y, [
+            ...regular, speaker, ...booth, ...(podAgents ?? []),
+          ]);
           if (hit) setSelectedProfile(profileFromAgent(hit));
         }
       }
@@ -1731,7 +1935,11 @@ export default function AgentConf() {
         focusWorldPoint(cam, f.gx, f.gy, f.zoom);
       } else {
         const { gx, gy } = worldToBoothPos(w.x, w.y);
-        if (isStageRoom(gx, gy) || isStageTile(gx, gy)) {
+        if (isPodcastBounds(gx, gy) || isPodcastPlatform(gx, gy)) {
+          setFocusId('podcast');
+          const f = FOCUS.podcast();
+          focusWorldPoint(cam, f.gx, f.gy, f.zoom);
+        } else if (isStageRoom(gx, gy) || isStageTile(gx, gy)) {
           setFocusId('stageScreen');
           const f = FOCUS.stageScreen();
           focusWorldPoint(cam, f.gx, f.gy, f.zoom);
@@ -1748,7 +1956,10 @@ export default function AgentConf() {
       } else if (e.key === '-') {
         zoomAtScreen(cam, v.cw / 2, v.ch / 2, 1 / ZOOM_STEP, v);
       } else if (e.key === '0') applyFocus('overview');
-      else if (e.key === 'Escape') setSelectedProfile(null);
+      else if (e.key === 'Escape') {
+        setSelectedProfile(null);
+        setShowCustomization(false);
+      }
     };
 
     canvas.addEventListener('wheel', onWheel, { passive: false });
@@ -1838,6 +2049,8 @@ export default function AgentConf() {
             onClick={()=>applyFocus('stage')}>🎤 MAIN STAGE</button>
           <button type="button" style={btn(focusId==='stageScreen','#A890FF')}
             onClick={()=>applyFocus('stageScreen')}>📺 SCREEN</button>
+          <button type="button" style={btn(focusId==='podcast','#FF7A58')}
+            onClick={()=>applyFocus('podcast')}>🎙️ PODCAST</button>
           <button type="button" style={btn(focusId==='floor','#60C0FF')}
             onClick={()=>applyFocus('floor')}>🏛️ EXPO FLOOR</button>
           <button
@@ -1858,6 +2071,22 @@ export default function AgentConf() {
           </button>
           <button
             type="button"
+            style={btn(movementPaused, '#50E890')}
+            onClick={toggleMovementPaused}
+            title={movementPaused ? 'Resume all agent movement' : 'Pause all agent movement'}
+          >
+            {movementPaused ? '▶ PLAY' : '⏸ PAUSE'}
+          </button>
+          <button
+            type="button"
+            style={btn(showCustomization, '#C8A0FF')}
+            onClick={() => setShowCustomization(v => !v)}
+            title="Browse agent customization codes"
+          >
+            👤 CUSTOMIZE
+          </button>
+          <button
+            type="button"
             style={btn(focusId === 'door', '#90A8FF')}
             onClick={spawnNewAgent}
             title="Spawn a new agent at the main entrance"
@@ -1873,6 +2102,7 @@ export default function AgentConf() {
             🚪 ENTRANCE
           </button>
           <span style={{fontSize:8,color:'#333',marginLeft:'auto'}}>
+            {movementPaused ? 'agents paused · ' : ''}
             {boothDragEnabled ? 'drag booths · ' : ''}click booth/agent · pan map
           </span>
         </div>
@@ -1889,6 +2119,20 @@ export default function AgentConf() {
           ))}
         </div>
       </div>
+
+      <CustomizationPanel
+        open={showCustomization}
+        onClose={() => setShowCustomization(false)}
+        agents={agentsRef.current
+          ? [
+            ...agentsRef.current.regular,
+            agentsRef.current.speaker,
+            ...agentsRef.current.booth,
+            ...(agentsRef.current.podcast ?? []),
+          ]
+          : []}
+        getDef={getDef}
+      />
 
       {selectedProfile && (
         <div
@@ -1942,11 +2186,26 @@ export default function AgentConf() {
             </div>
 
             <p style={{
-              fontSize:11, color:'#AAA', lineHeight:1.65, margin:'16px 0 18px',
+              fontSize:11, color:'#AAA', lineHeight:1.65, margin:'16px 0 12px',
               borderTop:'1px solid rgba(255,255,255,0.06)', paddingTop:14,
             }}>
               {selectedProfile.bio}
             </p>
+
+            {selectedProfile.hairCode && (
+              <div style={{
+                fontSize:9, color:'#666', lineHeight:1.6, marginBottom:14,
+                fontFamily: "'Courier New',monospace",
+                background:'rgba(0,0,0,0.25)', padding:'8px 10px', borderRadius:4,
+              }}>
+                <div style={{ color:'#888', marginBottom:4, letterSpacing:'0.5px' }}>APPEARANCE CODES</div>
+                hair: {selectedProfile.hairCode}<br />
+                eyes: {selectedProfile.eyesCode}<br />
+                mouth: {selectedProfile.mouthCode}<br />
+                shirt: {selectedProfile.shirtCode}<br />
+                trousers: {selectedProfile.trousersCode}
+              </div>
+            )}
 
             <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
               {selectedProfile.linkedin && (
